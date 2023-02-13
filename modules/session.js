@@ -44,37 +44,37 @@ class Session {
 					await this.page.setCookie(...cookies);
 				}
 
-				if (fs.existsSync(`${this.folder}/sessionStorage.json`)) {
-					const sessionStorageString = fs.readFileSync(
-						`${this.folder}/sessionStorage.json`,
-						{
-							encoding: "utf-8",
-						},
-					);
-					const sessionStorage = JSON.parse(sessionStorageString);
+				// if (fs.existsSync(`${this.folder}/sessionStorage.json`)) {
+				// 	const sessionStorageString = fs.readFileSync(
+				// 		`${this.folder}/sessionStorage.json`,
+				// 		{
+				// 			encoding: "utf-8",
+				// 		},
+				// 	);
+				// 	const sessionStorage = JSON.parse(sessionStorageString);
 
-					await this.page.evaluate((data) => {
-						for (const [key, value] of Object.entries(data)) {
-							sessionStorage[key] = value;
-						}
-					}, sessionStorage);
-				}
+				// 	await this.page.evaluate((data) => {
+				// 		for (const [key, value] of Object.entries(data)) {
+				// 			sessionStorage[key] = value;
+				// 		}
+				// 	}, sessionStorage);
+				// }
 
-				if (fs.existsSync(`${this.folder}/localStorage.json`)) {
-					const localStorageString = fs.readFileSync(
-						`${this.folder}/localStorage.json`,
-						{
-							encoding: "utf-8",
-						},
-					);
-					const localStorage = JSON.parse(localStorageString);
+				// if (fs.existsSync(`${this.folder}/localStorage.json`)) {
+				// 	const localStorageString = fs.readFileSync(
+				// 		`${this.folder}/localStorage.json`,
+				// 		{
+				// 			encoding: "utf-8",
+				// 		},
+				// 	);
+				// 	const localStorage = JSON.parse(localStorageString);
 
-					await this.page.evaluate((data) => {
-						for (const [key, value] of Object.entries(data)) {
-							localStorage[key] = value;
-						}
-					}, localStorage);
-				}
+				// 	await this.page.evaluate((data) => {
+				// 		for (const [key, value] of Object.entries(data)) {
+				// 			localStorage[key] = value;
+				// 		}
+				// 	}, localStorage);
+				// }
 				resolve();
 			} catch(err) {
 				reject(err);

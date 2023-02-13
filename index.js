@@ -2,10 +2,12 @@ const puppeteer = require("puppeteer");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+
 require("dotenv").config();
 
 //my modules
 const { Session } = require("./modules/session");
+const { getHosts } = require("./modules/getHosts");
 
 //data
 const token = process.env.OAUTH;
@@ -14,36 +16,13 @@ const pass = process.env.PASS;
 const sessionFolder = `${__dirname}/profiles`;
 
 async function main() {
-	const options = {
-		headers: {
-			Authorization: `OAuth ${token}`,
-		},
-	};
-	// let response = await axios.get("https://api.webmaster.yandex.net/v4/user", {headers: {
-	//     'Authorization': `OAuth ${token}`
-	// }}).then(res => res.data).catch(err => err);
+	const hosts = await getHosts(token);
 
-	// const {user_id} = response;
-	// console.log(user_id);
+	if (!hosts.length)
+		return console.log("Не удалось получить данные о доменах на аккаунте");
 
-	// const userId = 1469382668;
-
-	// let response = await axios
-	// 	.get(`https://api.webmaster.yandex.net/v4/user/${userId}/hosts`, options)
-	// 	.then((res) => res.data)
-	// 	.catch((err) => err);
-
-	// const { hosts } = response;
-
-	// console.log(hosts);
-
-	// const filePath = `${__dirname}/hosts.txt`;
-
-	// hosts.forEach(host => {
-	//     fs.appendFileSync(filePath, `${host.host_id}\n`, {encoding: "utf-8"})
-	// });
-
-	// https://webmaster.yandex.com/site/https:betwinner2.ru:443/indexing/mirrors/
+	//host_id это юрл который подставляем при проверке статуса переезда
+	//unicode_host_url это юрл в стандартном виде
 
 	const browser = await puppeteer.launch({
 		headless: false,
@@ -54,7 +33,7 @@ async function main() {
 
 	const page = await browser.newPage();
 
-	page.setDefaultTimeout(5000);
+	page.setDefaultTimeout(20000);
 
 	const session = new Session(page, `${__dirname}/profiles`);
 
@@ -79,22 +58,63 @@ async function main() {
 	let isLogin = false;
 
 	try {
-		isLogin = await page.waitForSelector("#passp-field-login");
+		isLogin = await page.waitForSelector("#passp-field-login", {
+			timeout: 8000,
+		});
 	} catch {}
 
+	if (isLogin) return console.log("Создайте новую сессию");
+
 	if (!isLogin) {
-		console.log("check is logged in");
 		const selectAccount = await page.waitForSelector(
 			"a[href='https://webmaster.yandex.com/sites/']",
 		);
-        
+
 		if (selectAccount) {
-		    await selectAccount.click();
+			await selectAccount.click();
 		}
 
-		// await page.goto("https://webmaster.yandex.com/sites/");
 		await page.waitForSelector(".UserID-Account");
 		console.log("Выполнен вход в аккаунт Яндекс Вебмастер");
+
+		let result = [];
+
+		for (let i = 0; i < hosts.length; i++) {
+			let host = hosts[i].host_id;
+			let url = hosts[i].unicode_host_url;
+
+			console.log("Всего сайтов:", hosts.length);
+			console.log("Счетчик:", i + 1);
+			console.log("Текущий хост:", host);
+			if (host) {
+				await page.goto(
+					`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+				);
+
+				try {
+					await page.waitForSelector(".MirrorsContent-Suggest", {
+						timeout: 5000,
+					});
+					const notifcationText = await page.evaluate(() => {
+						const text = document.querySelector(".MirrorsAlert-Content");
+						if (text) {
+							return text.textContent;
+						} else {
+							return "null";
+						}
+					});
+
+					result.push([url, notifcationText]);
+
+					await page.waitForTimeout(1000);
+				} catch (err) {
+					result.push([url, "error"]);
+					console.log(err);
+				}
+			}
+		}
+
+		console.log(result);
 	} else {
 		console.log("page loaded");
 
