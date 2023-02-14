@@ -12,20 +12,23 @@ class Session {
 			try {
 				const cookies = JSON.stringify(await this.page.cookies());
 
-				const sessionStorage = await this.page.evaluate(() =>
-					JSON.stringify(sessionStorage),
-				);
+				// const sessionStorage = await this.page.evaluate(() =>
+				// 	JSON.stringify(sessionStorage),
+				// );
 
-				const localStorage = await this.page.evaluate(() =>
-					JSON.stringify(localStorage),
-				);
+				// const localStorage = await this.page.evaluate(() =>
+				// 	JSON.stringify(localStorage),
+				// );
+
+				if (!fs.existsSync(`${this.folder}/cookies.json`)) {
+				}
 
 				fs.writeFileSync(`${this.folder}/cookies.json`, cookies);
-				fs.writeFileSync(`${this.folder}/sessionStorage.json`, sessionStorage);
-				fs.writeFileSync(`${this.folder}/localStorage.json`, localStorage);
+				// fs.writeFileSync(`${this.folder}/sessionStorage.json`, sessionStorage);
+				// fs.writeFileSync(`${this.folder}/localStorage.json`, localStorage);
 				resolve(true);
 			} catch (err) {
-				reject();
+				reject(err);
 			}
 		});
 	}
@@ -34,12 +37,9 @@ class Session {
 		return new Promise(async (resolve, reject) => {
 			try {
 				if (fs.existsSync(`${this.folder}/cookies.json`)) {
-					const cookiesString = fs.readFileSync(
-						`${this.folder}/cookies.json`,
-						{
-							encoding: "utf-8",
-						},
-					);
+					const cookiesString = fs.readFileSync(`${this.folder}/cookies.json`, {
+						encoding: "utf-8",
+					});
 					const cookies = JSON.parse(cookiesString);
 					await this.page.setCookie(...cookies);
 				}
@@ -76,7 +76,7 @@ class Session {
 				// 	}, localStorage);
 				// }
 				resolve();
-			} catch(err) {
+			} catch (err) {
 				reject(err);
 			}
 		});
