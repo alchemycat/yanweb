@@ -4,6 +4,9 @@ const fs = require("fs");
 const path = require("path");
 const prompt = require("prompt-sync")();
 const cluster = require("node:cluster");
+const figlet = require("figlet");
+const gradient = require("gradient-string");
+const chalk = require('chalk');
 
 //Мои модули
 const { Session } = require("./modules/session");
@@ -12,8 +15,21 @@ const { getHosts } = require("./modules/getHosts");
 
 async function init() {
 	if (cluster.isMaster) {
+
+		await new Promise(resolve => {
+			figlet("Yandex Webmaster Checker", function (err, data) {
+				if (err) {
+					console.log("Something went wrong...");
+					console.dir(err);
+					return;
+				}
+				console.log(gradient.retro(data));
+				resolve();
+			});
+		})
+	
 		//главный поток начинает работу, инициализирует данные
-		const threads_count = prompt("Количество потоков? ");
+		const threads_count = prompt(chalk.bold("Количество потоков? "));
 		let global_counter = 0;
 
 		if (!fs.existsSync(`${__dirname}/profiles`)) {
@@ -45,14 +61,22 @@ async function init() {
 			//вызываем воркеры
 			const worker = await cluster.fork();
 			global_counter++;
-			await worker.send({ global_counter, data, thread_name: `Поток ${i + 1}` });
+			await worker.send({
+				global_counter,
+				data,
+				thread_name: `[Поток ${i + 1}]`,
+			});
 		}
 
 		cluster.on("message", async (worker, msg, handle) => {
 			if (msg.message === "get_data") {
 				if (global_counter < data.length) {
 					global_counter++;
-					await worker.send({ global_counter, data: data, thread_name: msg.thread_name });
+					await worker.send({
+						global_counter,
+						data: data,
+						thread_name: msg.thread_name,
+					});
 				} else {
 					worker.kill();
 				}
@@ -79,14 +103,22 @@ async function init() {
 					fs.mkdirSync(sessionFolder);
 				}
 
-				let result = await main(sessionFolder, token, login, pass, answer, url, thread_name);
+				let result = await main(
+					sessionFolder,
+					token,
+					login,
+					pass,
+					answer,
+					url,
+					thread_name,
+				);
 
 				if (!result)
 					console.log(
 						`Для аккаунта: ${login} не удалось выполнить проверку доменов`,
 					);
 
-				console.log(`[${thread_name}] Проверка завершена`);
+				console.log(`${chalk.bold(thread_name)} Проверка завершена`);
 
 				process.send({ message: "get_data", thread_name });
 			}
@@ -96,7 +128,15 @@ async function init() {
 
 init();
 
-async function main(sessionFolder, token, login, pass, answer, url, thread_name) {
+async function main(
+	sessionFolder,
+	token,
+	login,
+	pass,
+	answer,
+	url,
+	thread_name,
+) {
 	const google = new GoogleSheet();
 	const hosts = await getHosts(token);
 
@@ -127,11 +167,11 @@ async function main(sessionFolder, token, login, pass, answer, url, thread_name)
 		await session
 			.loadSession()
 			.then(() => {
-				console.log(`[${thread_name}] Загрузили профиль`);
+				console.log(`${chalk.bold(thread_name)} Загрузил профиль`);
 			})
 			.catch((err) => {
 				console.log(err);
-				console.log(`[${thread_name}] Ошибка загрузки профиля`);
+				console.log(`${chalk.bold(thread_name)} Ошибка загрузки профиля`);
 			});
 	}
 
@@ -167,7 +207,7 @@ async function main(sessionFolder, token, login, pass, answer, url, thread_name)
 
 		try {
 			await page.waitForSelector("[name='captcha_answer']", { timeout: 5000 });
-			console.log(`[${thread_name}] Капча найдена`);
+			console.log(`${chalk.bold(thread_name)} Капча найдена`);
 			await page.waitForTimeout(20000);
 		} catch {}
 
@@ -190,11 +230,13 @@ async function main(sessionFolder, token, login, pass, answer, url, thread_name)
 		session
 			.saveSession()
 			.then(() => {
-				console.log(`[${thread_name}] Профиль для аккаунта: ${login} сохранен`);
+				console.log(`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`);
 			})
 			.catch((err) => {
 				console.log(err);
-				console.log(`[${thread_name}] Не удалось сохранить профиль для аккаунта: ${login}`);
+				console.log(
+					`${chalk.bold(thread_name)} Не удалось сохранить профиль для аккаунта: ${login}`,
+				);
 			});
 	}
 
@@ -217,7 +259,7 @@ async function main(sessionFolder, token, login, pass, answer, url, thread_name)
 		// console.log(err);
 	}
 
-	console.log(`[${thread_name}] Выполнен вход в аккаунт Яндекс Вебмастер`);
+	console.log(`${chalk.bold(thread_name)} Выполнен вход в аккаунт Яндекс Вебмастер`);
 
 	//здесь уже начинается проверка
 
@@ -227,7 +269,7 @@ async function main(sessionFolder, token, login, pass, answer, url, thread_name)
 		let host = hosts[i].host_id;
 		let url = hosts[i].unicode_host_url;
 
-		console.log(`[${thread_name}] Проверено сайтов: ${i + 1}/${hosts.length}`);
+		console.log(`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(i + 1)}/${chalk.green.bold(hosts.length)}`);
 
 		if (host) {
 			await page.goto(
