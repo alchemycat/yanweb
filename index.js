@@ -3,60 +3,100 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const prompt = require("prompt-sync")();
-
-// const threads = prompt("Количество потоков? ");
+const cluster = require("node:cluster");
 
 //Мои модули
 const { Session } = require("./modules/session");
 const { GoogleSheet } = require("./modules/googleSheet");
 const { getHosts } = require("./modules/getHosts");
 
-if (!fs.existsSync(`${__dirname}/profiles`)) {
-	fs.mkdirSync(`${__dirname}/profiles`);
-}
+async function init() {
+	if (cluster.isMaster) {
+		//главный поток начинает работу, инициализирует данные
+		const threads_count = prompt("Количество потоков? ");
+		let global_counter = 0;
 
-//Валидация
-if (!fs.existsSync(`${__dirname}/data.json`))
-	return console.log(
-		`Файл data.json не найден. Создайте файл по пути: ${__dirname}/data.json`,
-	);
+		if (!fs.existsSync(`${__dirname}/profiles`)) {
+			fs.mkdirSync(`${__dirname}/profiles`);
+		}
 
-let data = fs.readFileSync(`${__dirname}/data.json`, { encoding: "utf-8" });
+		//Валидация
+		if (!fs.existsSync(`${__dirname}/data.json`))
+			return console.log(
+				`Файл data.json не найден. Создайте файл по пути: ${__dirname}/data.json`,
+			);
 
-if (!data) return console.log("В файле data.json нету данных.");
+		let data = fs.readFileSync(`${__dirname}/data.json`, { encoding: "utf-8" });
 
-try {
-	data = JSON.parse(data);
-} catch {
-	return console.log(
-		"Некорректный формат данных в файле data.json, добавьте данные в json формате.",
-	);
-}
+		if (!data) return console.log("В файле data.json нету данных.");
 
-if (!data.length) return console.log("В файле data.json нету данных.");
+		try {
+			data = JSON.parse(data);
+		} catch {
+			return console.log(
+				"Некорректный формат данных в файле data.json, добавьте данные в json формате.",
+			);
+		}
 
-async function wrap(data) {
-	let counter = 0;
+		if (!data.length) return console.log("В файле data.json нету данных.");
+		/////-----
 
-	const { token, login, pass, answer, url } = data[counter];
+		for (let i = 0; i < threads_count; i++) {
+			//вызываем воркеры
+			const worker = await cluster.fork();
+			global_counter++;
+			await worker.send({ global_counter, data, thread_name: `Поток ${i + 1}` });
+		}
 
-	const loginName = login.match(/\w+(?=@)/)[0];
+		cluster.on("message", async (worker, msg, handle) => {
+			if (msg.message === "get_data") {
+				if (global_counter < data.length) {
+					global_counter++;
+					await worker.send({ global_counter, data: data, thread_name: msg.thread_name });
+				} else {
+					worker.kill();
+				}
+			}
+		});
 
-	const sessionFolder = `${__dirname}/profiles/${loginName}`;
+		cluster.on("exit", (worker) => {
+			console.log(`Закрываю поток`);
+		});
+	} else {
+		process.on("message", async (msg) => {
+			const { global_counter, data, thread_name } = msg;
 
-	if (!fs.existsSync(sessionFolder)) {
-		fs.mkdirSync(sessionFolder);
+			if (!data[global_counter - 1]) {
+				process.exit();
+			} else {
+				const { token, login, pass, answer, url } = data[global_counter - 1];
+
+				const loginName = login.match(/.*(?=@)/)[0];
+
+				const sessionFolder = `${__dirname}/profiles/${loginName}`;
+
+				if (!fs.existsSync(sessionFolder)) {
+					fs.mkdirSync(sessionFolder);
+				}
+
+				let result = await main(sessionFolder, token, login, pass, answer, url, thread_name);
+
+				if (!result)
+					console.log(
+						`Для аккаунта: ${login} не удалось выполнить проверку доменов`,
+					);
+
+				console.log(`[${thread_name}] Проверка завершена`);
+
+				process.send({ message: "get_data", thread_name });
+			}
+		});
 	}
-
-	await main(sessionFolder, token, login, pass, answer, url);
-
-	//задачи функции управлять потоками
-	//передавать данные в функцию мейн
 }
 
-wrap(data);
+init();
 
-async function main(sessionFolder, token, login, pass, answer, url) {
+async function main(sessionFolder, token, login, pass, answer, url, thread_name) {
 	const google = new GoogleSheet();
 	const hosts = await getHosts(token);
 
@@ -87,11 +127,11 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 		await session
 			.loadSession()
 			.then(() => {
-				console.log("Загрузили профиль");
+				console.log(`[${thread_name}] Загрузили профиль`);
 			})
 			.catch((err) => {
 				console.log(err);
-				console.log("Ошибка загрузки профиля");
+				console.log(`[${thread_name}] Ошибка загрузки профиля`);
 			});
 	}
 
@@ -99,7 +139,9 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 
 	let isLoginFieldExist = false;
 
-	await page.click('[data-type="login"]');
+	try {
+		await page.click('[data-type="login"]', { timeout: 5000 });
+	} catch {}
 
 	try {
 		isLoginFieldExist = await page.waitForSelector("#passp-field-login", {
@@ -125,11 +167,9 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 
 		try {
 			await page.waitForSelector("[name='captcha_answer']", { timeout: 5000 });
-			console.log("Капча найдена");
+			console.log(`[${thread_name}] Капча найдена`);
 			await page.waitForTimeout(20000);
-		} catch {
-			console.log("Капча не найдена");
-		}
+		} catch {}
 
 		let questionField;
 
@@ -150,11 +190,11 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 		session
 			.saveSession()
 			.then(() => {
-				console.log("Профиль сохранен");
+				console.log(`[${thread_name}] Профиль для аккаунта: ${login} сохранен`);
 			})
 			.catch((err) => {
 				console.log(err);
-				console.log("Не удалось сохранить профиль");
+				console.log(`[${thread_name}] Не удалось сохранить профиль для аккаунта: ${login}`);
 			});
 	}
 
@@ -174,10 +214,10 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 	try {
 		await page.waitForSelector(".UserID-Account", { timeout: 5000 });
 	} catch (err) {
-		console.log(err);
+		// console.log(err);
 	}
 
-	console.log("Выполнен вход в аккаунт Яндекс Вебмастер");
+	console.log(`[${thread_name}] Выполнен вход в аккаунт Яндекс Вебмастер`);
 
 	//здесь уже начинается проверка
 
@@ -187,9 +227,8 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 		let host = hosts[i].host_id;
 		let url = hosts[i].unicode_host_url;
 
-		console.log("Всего сайтов:", hosts.length);
-		console.log("Счетчик:", i + 1);
-		console.log("Текущий хост:", host);
+		console.log(`[${thread_name}] Проверено сайтов: ${i + 1}/${hosts.length}`);
+
 		if (host) {
 			await page.goto(
 				`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
@@ -213,14 +252,13 @@ async function main(sessionFolder, token, login, pass, answer, url) {
 				await page.waitForTimeout(1000);
 			} catch (err) {
 				result.push([url, "Ошибка"]);
-				console.log(err);
 			}
 		}
 	}
 
-	console.log(result);
-	const response = await google.sendData(result, url);
-	console.log(response);
+	await google.sendData(result, url);
+
 	await browser.close();
-	return console.log("Проверка завершена");
+
+	return true;
 }
