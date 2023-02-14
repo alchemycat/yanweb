@@ -7,18 +7,21 @@ require("dotenv").config();
 
 //my modules
 const { Session } = require("./modules/session");
+const { GoogleSheet } = require("./modules/googleSheet");
 const { getHosts } = require("./modules/getHosts");
 
 //data
 const token = process.env.OAUTH;
 const login = process.env.LOGIN;
 const pass = process.env.PASS;
+const url = process.env.SCRIPT_URL;
 const sessionFolder = `${__dirname}/profiles`;
 
 async function main() {
+	const google = new GoogleSheet();
 	const hosts = await getHosts(token);
 
-	if (!hosts.length)
+	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
 
 	//host_id это юрл который подставляем при проверке статуса переезда
@@ -100,7 +103,7 @@ async function main() {
 						if (text) {
 							return text.textContent;
 						} else {
-							return "null";
+							return "Без переезда";
 						}
 					});
 
@@ -108,13 +111,17 @@ async function main() {
 
 					await page.waitForTimeout(1000);
 				} catch (err) {
-					result.push([url, "error"]);
+					result.push([url, "Ошибка"]);
 					console.log(err);
 				}
 			}
 		}
 
 		console.log(result);
+		const response = await google.sendData(result, url);
+		console.log(response);
+		await browser.close();
+		return console.log("Проверка завершена");
 	} else {
 		console.log("page loaded");
 

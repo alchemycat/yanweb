@@ -23,7 +23,11 @@ async function getHosts(token) {
 		.then((res) => res.data)
 		.catch((err) => err);
 
-	const { hosts } = response;
+	let hosts = false;
+
+	if (response.hasOwnProperty('hosts')) {
+		hosts = response.hosts;
+	}
 
 	return hosts;
 }
