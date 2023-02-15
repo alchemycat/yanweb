@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-class GoogleSheet {
+class Google {
 	async sendData(data, url) {
 		const preparedData = JSON.stringify({ data });
 		const response = await axios.post(url, preparedData);
@@ -9,4 +9,4 @@ class GoogleSheet {
 	}
 }
 
-exports.GoogleSheet = GoogleSheet;
+exports.Google = Google;

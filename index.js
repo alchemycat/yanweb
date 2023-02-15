@@ -6,28 +6,27 @@ const prompt = require("prompt-sync")();
 const cluster = require("node:cluster");
 const figlet = require("figlet");
 const gradient = require("gradient-string");
-const chalk = require('chalk');
+const chalk = require("chalk");
 
 //Мои модули
-const { Session } = require("./modules/session");
-const { GoogleSheet } = require("./modules/googleSheet");
-const { getHosts } = require("./modules/getHosts");
+const { Session } = require("./modules/Session");
+const { Google } = require("./modules/Google");
+const { Yandex } = require("./modules/Yandex");
 
 async function init() {
 	if (cluster.isMaster) {
-
-		await new Promise(resolve => {
+		await new Promise((resolve) => {
 			figlet("Yandex Webmaster Checker", function (err, data) {
 				if (err) {
-					console.log("Something went wrong...");
+					console.log("Что-то пошло не так...");
 					console.dir(err);
 					return;
 				}
 				console.log(gradient.retro(data));
 				resolve();
 			});
-		})
-	
+		});
+
 		//главный поток начинает работу, инициализирует данные
 		const threads_count = prompt(chalk.bold("Количество потоков? "));
 		let global_counter = 0;
@@ -137,14 +136,20 @@ async function main(
 	url,
 	thread_name,
 ) {
-	const google = new GoogleSheet();
-	const hosts = await getHosts(token);
+	const google = new Google();
+	const yandex = new Yandex(token);
+
+	//получаем информацию о текущем хосте, а именно линк на главное зеркало
+	await yandex.getUserID();
+
+	const hosts = await yandex.getHosts();
+
+	//https:betwinner-bk-of1.ru:443/
+	//unicode_host_url
+	//host_id
 
 	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
-
-	//host_id это юрл который подставляем при проверке статуса переезда
-	//unicode_host_url это юрл в стандартном виде
 
 	const browser = await puppeteer.launch({
 		headless: false,
@@ -230,12 +235,16 @@ async function main(
 		session
 			.saveSession()
 			.then(() => {
-				console.log(`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`);
+				console.log(
+					`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`,
+				);
 			})
 			.catch((err) => {
 				console.log(err);
 				console.log(
-					`${chalk.bold(thread_name)} Не удалось сохранить профиль для аккаунта: ${login}`,
+					`${chalk.bold(
+						thread_name,
+					)} Не удалось сохранить профиль для аккаунта: ${login}`,
 				);
 			});
 	}
@@ -255,31 +264,38 @@ async function main(
 
 	try {
 		await page.waitForSelector(".UserID-Account", { timeout: 5000 });
-	} catch (err) {
-		// console.log(err);
-	}
+	} catch {}
 
-	console.log(`${chalk.bold(thread_name)} Выполнен вход в аккаунт Яндекс Вебмастер`);
+	console.log(
+		`${chalk.bold(thread_name)} Выполнен вход в аккаунт Яндекс Вебмастер`,
+	);
 
 	//здесь уже начинается проверка
 
 	let result = [];
 
-	for (let i = 0; i < hosts.length; i++) {
-		let host = hosts[i].host_id;
-		let url = hosts[i].unicode_host_url;
+	async function checkHost(host, url) {
+		await page.goto(
+			`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+		);
 
-		console.log(`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(i + 1)}/${chalk.green.bold(hosts.length)}`);
-
-		if (host) {
-			await page.goto(
-				`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+		try {
+			const element = await page.waitForSelector(
+				".MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
+				{
+					timeout: 4000,
+					visible: true,
+				},
 			);
 
-			try {
-				await page.waitForSelector(".MirrorsContent-Suggest", {
-					timeout: 5000,
-				});
+			const className = await page.evaluate((el) => el.className, element);
+
+			if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
+				const mainMirror = await yandex.getMainMirror(host);
+				host = mainMirror.host_id;
+				url = mainMirror.unicode_host_url;
+				await checkHost(host, url);
+			} else if (/mirrorscontent\-suggest/i.test(className)) {
 				const notifcationText = await page.evaluate(() => {
 					const text = document.querySelector(".MirrorsAlert-Content");
 					if (text) {
@@ -290,12 +306,26 @@ async function main(
 				});
 
 				result.push([url, notifcationText]);
-
-				await page.waitForTimeout(1000);
-			} catch (err) {
-				result.push([url, "Ошибка"]);
+			} else {
+				throw new Error("Информация о переезде не найдена");
 			}
+		} catch (err) {
+			result.push([url, "Ошибка"]);
 		}
+	}
+
+	for (let i = 0; i < hosts.length; i++) {
+		let host = hosts[i].host_id;
+		let url = hosts[i].unicode_host_url;
+
+		//check function
+		await checkHost(host, url);
+		await page.waitForTimeout(1000);
+		console.log(
+			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
+				i + 1,
+			)}/${chalk.green.bold(hosts.length)}`,
+		);
 	}
 
 	await google.sendData(result, url);
