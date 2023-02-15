@@ -16,7 +16,6 @@
     "figlet": "^1.5.2",
     "gradient-string": "^2.0.2",
     "prompt-sync": "^4.2.0",
-    "puppeteer": "^19.6.3",
-    "telegraf": "^4.11.2"
+    "puppeteer": "^19.6.3"
   }
 }

@@ -14,6 +14,7 @@ const { Session } = require("./modules/Session");
 const { Google } = require("./modules/Google");
 const { Yandex } = require("./modules/Yandex");
 const { Telegram } = require("./modules/Telegram");
+const { sleep } = require("./modules/sleep");
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
@@ -82,6 +83,7 @@ async function init() {
 						thread_name: msg.thread_name,
 					});
 				} else {
+					console.log("worker killed");
 					worker.kill();
 				}
 			}
@@ -225,6 +227,8 @@ async function main(
 		await page.click(".passp-sign-in-button button");
 
 		try {
+			let tryCounter = 0;
+
 			await page.waitForSelector(
 				"[data-t='challenge_sumbit_phone-confirmation']",
 				{
@@ -235,14 +239,49 @@ async function main(
 
 			await page.click(".Button2_type_submit");
 
-			const code = await telegram.getCode(thread_name, loginName);
+			let isPhone;
 
-			await page.type("#passp-field-phoneCode", code);
+			while (!isPhone && tryCounter < 3) {
+				tryCounter++;
+				if (tryCounter >= 2) {
+					console.log("Код веден не верно, введите код повторно");
+				}
+				isPhone = await checkPhoneConfirmation();
+				await sleep(2000);
+				console.log(tryCounter);
+			}
 
-			await page.click(".Button2_type_submit");
-
-			await page.waitForNavigation();
+			if (isPhone) {
+				console.log(`${chalk.bold(thread_name)} Код введен верно`);
+			} else {
+				return console.log(`${chalk.bold(thread_name)} Не удалось ввести код`);
+			}
 		} catch {}
+
+		async function checkPhoneConfirmation() {
+			try {
+				const isExist = await page.waitForSelector("#passp-field-phoneCode", {
+					timeout: 5000,
+					visible: true,
+				});
+
+				if (!isExist) return true;
+
+				const code = await telegram.getCode(thread_name, loginName);
+
+				await page.type("#passp-field-phoneCode", code);
+
+				await page.click(".Button2_type_submit");
+
+				await page.waitForSelector(".UserID-Account", {
+					timeout: 5000,
+				});
+
+				return true;
+			} catch (err) {
+				return false;
+			}
+		}
 
 		try {
 			await page.waitForSelector("[name='captcha_answer']", { timeout: 5000 });
