@@ -110,6 +110,7 @@ async function init() {
 					answer,
 					url,
 					thread_name,
+					loginName,
 				);
 
 				if (!result)
@@ -135,6 +136,7 @@ async function main(
 	answer,
 	url,
 	thread_name,
+	loginName,
 ) {
 	const google = new Google();
 	const yandex = new Yandex(token);
@@ -172,11 +174,19 @@ async function main(
 		await session
 			.loadSession()
 			.then(() => {
-				console.log(`${chalk.bold(thread_name)} Загрузил профиль`);
+				console.log(
+					`${chalk.bold(thread_name)} Загрузил профиль: ${chalk.yellow.bold(
+						loginName,
+					)}`,
+				);
 			})
 			.catch((err) => {
 				console.log(err);
-				console.log(`${chalk.bold(thread_name)} Ошибка загрузки профиля`);
+				console.log(
+					`${chalk.bold(
+						thread_name,
+					)} Ошибка загрузки профиля: ${chalk.yellow.bold(loginName)}`,
+				);
 			});
 	}
 
@@ -267,14 +277,18 @@ async function main(
 	} catch {}
 
 	console.log(
-		`${chalk.bold(thread_name)} Выполнен вход в аккаунт Яндекс Вебмастер`,
+		`${chalk.bold(
+			thread_name,
+		)} Выполнен вход в аккаунт Яндекс Вебмастер: ${chalk.yellow.bold(
+			loginName,
+		)}`,
 	);
 
 	//здесь уже начинается проверка
 
 	let result = [];
 
-	async function checkHost(host, url) {
+	async function checkHost(host, url, loginName) {
 		await page.goto(
 			`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
 		);
@@ -294,7 +308,7 @@ async function main(
 				const mainMirror = await yandex.getMainMirror(host);
 				host = mainMirror.host_id;
 				url = mainMirror.unicode_host_url;
-				await checkHost(host, url);
+				await checkHost(host, url, loginName);
 			} else if (/mirrorscontent\-suggest/i.test(className)) {
 				const notifcationText = await page.evaluate(() => {
 					const text = document.querySelector(".MirrorsAlert-Content");
@@ -319,7 +333,7 @@ async function main(
 		let url = hosts[i].unicode_host_url;
 
 		//check function
-		await checkHost(host, url);
+		await checkHost(host, url, loginName);
 		await page.waitForTimeout(1000);
 		console.log(
 			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
@@ -328,7 +342,7 @@ async function main(
 		);
 	}
 
-	await google.sendData(result, url);
+	await google.sendData(result, loginName, url);
 
 	await browser.close();
 

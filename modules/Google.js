@@ -1,8 +1,8 @@
 const axios = require("axios");
 
 class Google {
-	async sendData(data, url) {
-		const preparedData = JSON.stringify({ data });
+	async sendData(data, login, url) {
+		const preparedData = JSON.stringify({ login, data });
 		const response = await axios.post(url, preparedData);
 
 		return response;
