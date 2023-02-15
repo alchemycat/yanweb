@@ -7,11 +7,16 @@ const cluster = require("node:cluster");
 const figlet = require("figlet");
 const gradient = require("gradient-string");
 const chalk = require("chalk");
+require("dotenv").config();
 
 //Мои модули
 const { Session } = require("./modules/Session");
 const { Google } = require("./modules/Google");
 const { Yandex } = require("./modules/Yandex");
+const { Telegram } = require("./modules/Telegram");
+
+const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramChatID = process.env.TELEGRAM_CHAT_ID;
 
 async function init() {
 	if (cluster.isMaster) {
@@ -140,13 +145,12 @@ async function main(
 ) {
 	const google = new Google();
 	const yandex = new Yandex(token);
+	const telegram = new Telegram(telegramToken, telegramChatID);
 
-	//получаем информацию о текущем хосте, а именно линк на главное зеркало
 	await yandex.getUserID();
 
 	const hosts = await yandex.getHosts();
 
-	//https:betwinner-bk-of1.ru:443/
 	//unicode_host_url
 	//host_id
 
@@ -221,6 +225,26 @@ async function main(
 		await page.click(".passp-sign-in-button button");
 
 		try {
+			await page.waitForSelector(
+				"[data-t='challenge_sumbit_phone-confirmation']",
+				{
+					timeout: 5000,
+					visible: true,
+				},
+			);
+
+			await page.click(".Button2_type_submit");
+
+			const code = await telegram.getCode(thread_name, loginName);
+
+			await page.type("#passp-field-phoneCode", code);
+
+			await page.click(".Button2_type_submit");
+
+			await page.waitForNavigation();
+		} catch {}
+
+		try {
 			await page.waitForSelector("[name='captcha_answer']", { timeout: 5000 });
 			console.log(`${chalk.bold(thread_name)} Капча найдена`);
 			await page.waitForTimeout(20000);
@@ -259,7 +283,7 @@ async function main(
 			});
 	}
 
-	let selectAccount;
+	let selectAccount = false;
 
 	try {
 		selectAccount = await page.waitForSelector(
@@ -272,9 +296,16 @@ async function main(
 		await selectAccount.click();
 	}
 
+	let isLoggedIn = false;
+
 	try {
-		await page.waitForSelector(".UserID-Account", { timeout: 5000 });
+		isLoggedIn = await page.waitForSelector(".UserID-Account", {
+			timeout: 5000,
+		});
 	} catch {}
+
+	if (!isLoggedIn)
+		return console.log(`Не удалось выполнить логин в аккаунт: ${loginName}`);
 
 	console.log(
 		`${chalk.bold(
@@ -337,8 +368,8 @@ async function main(
 		await page.waitForTimeout(1000);
 		console.log(
 			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
-				i + 1,
-			)}/${chalk.green.bold(hosts.length)}`,
+				i + 1 + "/" + hosts.length,
+			)}`,
 		);
 	}
 
