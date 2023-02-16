@@ -86,7 +86,6 @@ async function init() {
 						thread_name: msg.thread_name,
 					});
 				} else {
-					console.log("worker killed");
 					worker.kill();
 				}
 			}
@@ -298,7 +297,9 @@ async function main(
 
 		//check function
 		const checkResult = await yandexWeb.checkHost(host, url);
-		result.push(checkResult);
+		if (checkResult) {
+			result.push(checkResult);
+		}
 		await page.waitForTimeout(1000);
 		console.log(
 			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
@@ -306,6 +307,8 @@ async function main(
 			)}`,
 		);
 	}
+
+
 
 	await google.sendData(result, loginName, url);
 
