@@ -15,6 +15,7 @@ const { Google } = require("./modules/Google");
 const { Yandex } = require("./modules/Yandex");
 const { Telegram } = require("./modules/Telegram");
 const { Captcha } = require("./modules/Captcha");
+const { YandexWeb } = require("./modules/YandexWeb");
 const { sleep } = require("./modules/sleep");
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
@@ -103,7 +104,11 @@ async function init() {
 			} else {
 				const { token, login, pass, answer, url } = data[global_counter - 1];
 
-				const loginName = login.match(/.*(?=@)/)[0];
+				let loginName = login;
+
+				if (/.*(?=@)/.test(login)) {
+					loginName = login.match(/.*(?=@)/)[0];
+				}
 
 				const sessionFolder = `${__dirname}/profiles/${loginName}`;
 
@@ -156,9 +161,6 @@ async function main(
 
 	const hosts = await yandex.getHosts();
 
-	//unicode_host_url
-	//host_id
-
 	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
 
@@ -170,6 +172,17 @@ async function main(
 	});
 
 	const page = await browser.newPage();
+
+	const yandexWeb = new YandexWeb(
+		page,
+		captcha,
+		telegram,
+		thread_name,
+		loginName,
+		login,
+		pass,
+		answer,
+	);
 
 	page.setDefaultTimeout(20000);
 
@@ -201,8 +214,6 @@ async function main(
 
 	await page.reload();
 
-	//Textinput-Hint_state_error
-
 	let isLoginFieldExist = false;
 
 	try {
@@ -215,10 +226,14 @@ async function main(
 		});
 	} catch {}
 
+	let isLoginSuccess;
+
 	//если переменная true тогда нужно выполнить логин
 	if (isLoginFieldExist) {
-		await login();
+		isLoginSuccess = await yandexWeb.loginToWebmaster();
 	}
+
+	if (!isLoginSuccess) return false;
 
 	let selectAccount = false;
 
@@ -243,6 +258,24 @@ async function main(
 
 	if (!isLoggedIn)
 		return console.log(`Не удалось выполнить логин в аккаунт: ${loginName}`);
+
+	if (isLoginFieldExist) {
+		session
+			.saveSession()
+			.then(() => {
+				console.log(
+					`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`,
+				);
+			})
+			.catch((err) => {
+				console.log(err);
+				console.log(
+					`${chalk.bold(
+						thread_name,
+					)} Не удалось сохранить профиль для аккаунта: ${login}`,
+				);
+			});
+	}
 
 	console.log(
 		`${chalk.bold(
@@ -296,23 +329,23 @@ async function main(
 		}
 	}
 
-	for (let i = 0; i < hosts.length; i++) {
-		let host = hosts[i].host_id;
-		let url = hosts[i].unicode_host_url;
+	// for (let i = 0; i < hosts.length; i++) {
+	// 	let host = hosts[i].host_id;
+	// 	let url = hosts[i].unicode_host_url;
 
-		//check function
-		await checkHost(host, url, loginName);
-		await page.waitForTimeout(1000);
-		console.log(
-			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
-				i + 1 + "/" + hosts.length,
-			)}`,
-		);
-	}
+	// 	//check function
+	// 	await checkHost(host, url, loginName);
+	// 	await page.waitForTimeout(1000);
+	// 	console.log(
+	// 		`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
+	// 			i + 1 + "/" + hosts.length,
+	// 		)}`,
+	// 	);
+	// }
 
-	await google.sendData(result, loginName, url);
+	// await google.sendData(result, loginName, url);
 
-	await browser.close();
+	// await browser.close();
 
 	return true;
 }

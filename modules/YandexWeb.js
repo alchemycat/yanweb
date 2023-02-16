@@ -3,7 +3,16 @@ const axios = require("axios");
 const { sleep } = require("./sleep");
 
 class YandexWeb {
-	constructor(page, captcha, telegram, thread_name, loginName, login, pass, answer) {
+	constructor(
+		page,
+		captcha,
+		telegram,
+		thread_name,
+		loginName,
+		login,
+		pass,
+		answer,
+	) {
 		this.page = page;
 		this.captcha = captcha;
 		this.telegram = telegram;
@@ -14,17 +23,12 @@ class YandexWeb {
 		this.answer = answer;
 	}
 
-	async isCorrectField(fieldName) {
+	async isCorrectField() {
 		try {
 			await this.page.waitForSelector(".Textinput-Hint_state_error", {
 				timeout: 5000,
 				visible: true,
 			});
-			console.log(
-				`${chalk.bold(this.thread_name)} ${fieldName}: для ${
-					this.loginName
-				} не подходит`,
-			);
 			return false;
 		} catch {
 			return true;
@@ -44,15 +48,30 @@ class YandexWeb {
 		}
 	}
 
-	async solveCaptcha() {
+	async setCaptcha() {
 		try {
 			let tryCounter = 0;
+			let isCaptchaExist = true;
 
 			while (isCaptchaExist && tryCounter < 3) {
 				tryCounter++;
+
 				console.log(`${chalk.bold(this.thread_name)} Капча найдена`);
-				await this.getCaptcha();
+
+				const image = await this.getCaptchaImage();
+
+				if (image) {
+					const solution = await this.captcha.resolveCaptcha(image); // Отправляем капчу в capmonster cloud
+
+					await this.page.type('input[name="captcha_answer"]', solution);
+
+					await this.page.waitForTimeout(1000);
+
+					await this.page.click(".passp-sign-in-button button");
+				}
+
 				await sleep(5000);
+
 				console.log(
 					`${chalk.bold(
 						this.thread_name,
@@ -71,17 +90,13 @@ class YandexWeb {
 		}
 	}
 
-	async getCaptcha() {
+	async getCaptchaImage() {
 		try {
 			const captchaSrc = await this.page.evaluate(() => {
 				const img = document.querySelector(".captcha__image");
 				if (!img) return false;
 				return img.src;
 			});
-
-			console.log(
-				`${chalk.bold(this.thread_name)} Ссылка на капчу: ${captchaSrc}`,
-			);
 
 			if (!captchaSrc) return false;
 
@@ -97,23 +112,12 @@ class YandexWeb {
 				});
 
 			if (!response) {
-				console.log(`${chalk.bold(this.thread_name)}`);
 				return false;
 			}
-
-			const solution = await this.captcha.resolveCaptcha(response); // Отправляем капчу в capmonster cloud
-
-			if (!solution) {
-				console.log(`${chalk.bold(this.thread_name)} Не удалось решить капчу`);
-				return false;
-			}
-
-			await this.page.type('input[name="captcha_answer"]', solution);
-
-			await this.page.waitForTimeout(1000);
-
-			await this.page.click(".passp-sign-in-button button");
-		} catch {}
+			return response;
+		} catch {
+			return false;
+		}
 	}
 
 	async isPhoneConfirmation() {
@@ -145,7 +149,7 @@ class YandexWeb {
 				if (tryCounter >= 2) {
 					console.log("Код веден не верно, введите код повторно");
 				}
-				isPhone = await checkPhoneConfirmation();
+				isPhone = await this.getConfirmationCode();
 				await sleep(2000);
 				console.log(tryCounter);
 			}
@@ -162,6 +166,62 @@ class YandexWeb {
 		}
 	}
 
+	async getConfirmationCode() {
+		try {
+			const isExist = await this.page.waitForSelector(
+				"#passp-field-phoneCode",
+				{
+					timeout: 5000,
+					visible: true,
+				},
+			);
+
+			if (!isExist) return true;
+
+			const code = await this.telegram.getCode(
+				this.thread_name,
+				this.loginName,
+			);
+
+			await this.page.type("#passp-field-phoneCode", code);
+
+			await this.page.click(".Button2_type_submit");
+
+			await this.page.waitForSelector(".UserID-Account", {
+				timeout: 5000,
+				visible: true,
+			});
+
+			return true;
+		} catch (err) {
+			return false;
+		}
+	}
+
+	async isQuestion() {
+		try {
+			await this.page.waitForSelector("#passp-field-question", {
+				timeout: 5000,
+			});
+
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async setAnswer() {
+		try {
+			await questionField.type(this.answer);
+			await this.page.waitForTimeout(1000);
+			await this.page.click(".Button2_type_submit");
+
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	async loginToWebmaster() {
 		try {
 			await this.page.click("[data-id='button-all']", { timeout: 4000 });
@@ -171,95 +231,80 @@ class YandexWeb {
 
 		await this.page.click(".passp-sign-in-button button");
 
-		let isCorrect = await this.isCorrectField("Логин"); //Проверяем подошел ли логин
+		let isCorrect = await this.isCorrectField(); //Проверяем подошел ли логин
 
-		if (!isCorrect) return false;
+		if (!isCorrect) {
+			console.log(
+				`${chalk.bold(this.thread_name)} Логин для - ${
+					this.loginName
+				} не подходит`,
+			);
+			return false;
+		}
 
 		await this.page.waitForSelector("[name='passwd']", { visible: true });
 
 		await this.page.type("[name='passwd']", this.pass);
 
+		await this.page.click(".passp-sign-in-button button");
+
 		isCorrect = await this.isCorrectField("Пароль"); //Проверяем подошел ли логин
 
-		if (!isCorrect) return false;
-
-		await this.page.click(".passp-sign-in-button button");
+		if (!isCorrect) {
+			console.log(
+				`${chalk.bold(this.thread_name)} Пароль для - ${
+					this.loginName
+				} не подходит`,
+			);
+			return false;
+		}
 
 		let isCaptchaExist = await this.checkCaptchaExist();
 
 		if (isCaptchaExist) {
-			await this.solveCaptcha();
+			await this.setCaptcha();
 		}
 
 		let isPhoneConfirmationNeed = await this.isPhoneConfirmation();
 
 		if (isPhoneConfirmationNeed) {
+			await this.setConfirmationCode();
 		}
 
-		async function checkPhoneConfirmation() {
-			try {
-				const isExist = await this.page.waitForSelector(
-					"#passp-field-phoneCode",
-					{
-						timeout: 5000,
-						visible: true,
-					},
+		let questionField = await this.isQuestion();
+
+		if (questionField) {
+			let isAnswerEntered = false;
+
+			if (questionField) {
+				isAnswerEntered = await this.setAnswer();
+			}
+
+			if (!isAnswerEntered) {
+				console.log(
+					`${chalk.bold(
+						this.thread_name,
+					)} не удалось ввести ответ на секретный вопрос`,
 				);
-
-				if (!isExist) return true;
-
-				const code = await this.telegram.getCode(
-					this.thread_name,
-					this.loginName,
-				);
-
-				await this.page.type("#passp-field-phoneCode", code);
-
-				await this.page.click(".Button2_type_submit");
-
-				await this.page.waitForSelector(".UserID-Account", {
-					timeout: 5000,
-					visible: true,
-				});
-
-				return true;
-			} catch (err) {
 				return false;
 			}
 		}
 
-		let questionField;
-
+		//нажимаем кнопку пропустить если нам предлагает установить аватар
 		try {
-			questionField = await this.page.waitForSelector("#passp-field-question", {
-				timeout: 5000,
-			});
+			const skip = await this.page.waitForSelector(
+				'.registration__avatar-btn a[href="https://webmaster.yandex.com/sites/"]',
+				{ timeout: 4000, visible: true },
+			);
+			if (skip) {
+				await skip.click();
+			}
 		} catch {}
-
-		if (questionField) {
-			await questionField.type(this.answer);
-			await this.page.waitForTimeout(1000);
-			await this.page.click(".Button2_type_submit");
-		}
 
 		await this.page.waitForTimeout(5000);
 
-		session
-			.saveSession()
-			.then(() => {
-				console.log(
-					`${chalk.bold(
-						this.thread_name,
-					)} Профиль для аккаунта: ${this.login} сохранен`,
-				);
-			})
-			.catch((err) => {
-				console.log(err);
-				console.log(
-					`${chalk.bold(
-						this.thread_name,
-					)} Не удалось сохранить профиль для аккаунта: ${this.login}`,
-				);
-			});
+		return true;
 	}
 }
+
+exports.YandexWeb = YandexWeb;
