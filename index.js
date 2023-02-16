@@ -177,6 +177,7 @@ async function main(
 		page,
 		captcha,
 		telegram,
+		yandex,
 		thread_name,
 		loginName,
 		login,
@@ -231,9 +232,9 @@ async function main(
 	//если переменная true тогда нужно выполнить логин
 	if (isLoginFieldExist) {
 		isLoginSuccess = await yandexWeb.loginToWebmaster();
+		if (!isLoginSuccess) return false;
 	}
 
-	if (!isLoginSuccess) return false;
 
 	let selectAccount = false;
 
@@ -291,63 +292,24 @@ async function main(
 
 	let result = [];
 
-	async function checkHost(host, url, loginName) {
-		await page.goto(
-			`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+	for (let i = 0; i < hosts.length; i++) {
+		let host = hosts[i].host_id;
+		let url = hosts[i].unicode_host_url;
+
+		//check function
+		const checkResult = await yandexWeb.checkHost(host, url);
+		result.push(checkResult);
+		await page.waitForTimeout(1000);
+		console.log(
+			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
+				i + 1 + "/" + hosts.length,
+			)}`,
 		);
-
-		try {
-			const element = await page.waitForSelector(
-				".MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
-				{
-					timeout: 4000,
-					visible: true,
-				},
-			);
-
-			const className = await page.evaluate((el) => el.className, element);
-
-			if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
-				const mainMirror = await yandex.getMainMirror(host);
-				host = mainMirror.host_id;
-				url = mainMirror.unicode_host_url;
-				await checkHost(host, url, loginName);
-			} else if (/mirrorscontent\-suggest/i.test(className)) {
-				const notifcationText = await page.evaluate(() => {
-					const text = document.querySelector(".MirrorsAlert-Content");
-					if (text) {
-						return text.textContent;
-					} else {
-						return "Без переезда";
-					}
-				});
-
-				result.push([url, notifcationText]);
-			} else {
-				throw new Error("Информация о переезде не найдена");
-			}
-		} catch (err) {
-			result.push([url, "Ошибка"]);
-		}
 	}
 
-	// for (let i = 0; i < hosts.length; i++) {
-	// 	let host = hosts[i].host_id;
-	// 	let url = hosts[i].unicode_host_url;
+	await google.sendData(result, loginName, url);
 
-	// 	//check function
-	// 	await checkHost(host, url, loginName);
-	// 	await page.waitForTimeout(1000);
-	// 	console.log(
-	// 		`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
-	// 			i + 1 + "/" + hosts.length,
-	// 		)}`,
-	// 	);
-	// }
-
-	// await google.sendData(result, loginName, url);
-
-	// await browser.close();
+	await browser.close();
 
 	return true;
 }

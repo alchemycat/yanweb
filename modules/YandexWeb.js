@@ -7,6 +7,7 @@ class YandexWeb {
 		page,
 		captcha,
 		telegram,
+		yandex,
 		thread_name,
 		loginName,
 		login,
@@ -16,6 +17,7 @@ class YandexWeb {
 		this.page = page;
 		this.captcha = captcha;
 		this.telegram = telegram;
+		this.yandex = yandex;
 		this.thread_name = thread_name;
 		this.loginName = loginName;
 		this.login = login;
@@ -341,6 +343,46 @@ class YandexWeb {
 		await this.page.waitForTimeout(5000);
 
 		return true;
+	}
+
+	async checkHost(host, url) {
+		await this.page.goto(
+			`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+		);
+
+		try {
+			const element = await this.page.waitForSelector(
+				".MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
+				{
+					timeout: 4000,
+					visible: true,
+				},
+			);
+
+			const className = await this.page.evaluate((el) => el.className, element);
+
+			if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
+				const mainMirror = await this.yandex.getMainMirror(host);
+				host = mainMirror.host_id;
+				url = mainMirror.unicode_host_url;
+				await this.checkHost(host, url);
+			} else if (/mirrorscontent\-suggest/i.test(className)) {
+				const notifcationText = await this.page.evaluate(() => {
+					const text = document.querySelector(".MirrorsAlert-Content");
+					if (text) {
+						return text.textContent;
+					} else {
+						return "Без переезда";
+					}
+				});
+
+				return [url, notifcationText];
+			} else {
+				throw new Error("Информация о переезде не найдена");
+			}
+		} catch (err) {
+			return [url, "Ошибка"];
+		}
 	}
 }
 
