@@ -63,6 +63,14 @@ class YandexWeb {
 				if (image) {
 					const solution = await this.captcha.resolveCaptcha(image); // Отправляем капчу в capmonster cloud
 
+					const input = await this.page.waitForSelector(
+						'input[name="captcha_answer"]',
+						{ visible: true },
+					);
+
+					await input.click({ clickCount: 3 });
+					await input.press("Backspace");
+
 					await this.page.type('input[name="captcha_answer"]', solution);
 
 					await this.page.waitForTimeout(1000);
@@ -81,8 +89,10 @@ class YandexWeb {
 			}
 
 			if (isCaptchaExist) {
+				console.log(`${chalk.bold(this.thread_name)} Не удалось решить капчу`);
 				return false;
 			} else {
+				console.log(`${chalk.bold(this.thread_name)} Удалось решить капчу`);
 				return true;
 			}
 		} catch {
@@ -242,13 +252,15 @@ class YandexWeb {
 			return false;
 		}
 
-		await this.page.waitForSelector("[name='passwd']", { visible: true });
+		let inputPassword = await this.page.waitForSelector("[name='passwd']", {
+			visible: true,
+		});
 
-		await this.page.type("[name='passwd']", this.pass);
+		await inputPassword.type(this.pass);
 
 		await this.page.click(".passp-sign-in-button button");
 
-		isCorrect = await this.isCorrectField("Пароль"); //Проверяем подошел ли логин
+		isCorrect = await this.isCorrectField(); //Проверяем подошел ли логин
 
 		if (!isCorrect) {
 			console.log(
@@ -264,6 +276,31 @@ class YandexWeb {
 		if (isCaptchaExist) {
 			await this.setCaptcha();
 		}
+
+		try {
+			inputPassword = await this.page.waitForSelector("[name='passwd']", {
+				timeout: 5000,
+				visible: true,
+			});
+
+			await inputPassword.click({ clickCount: 3 });
+			await inputPassword.press("Backspace");
+
+			await inputPassword.type(this.pass);
+
+			await this.page.click(".passp-sign-in-button button");
+
+			isCorrect = await this.isCorrectField(); //Проверяем подошел ли логин
+
+			if (!isCorrect) {
+				console.log(
+					`${chalk.bold(this.thread_name)} Пароль для - ${
+						this.loginName
+					} не подходит`,
+				);
+				return false;
+			}
+		} catch {}
 
 		let isPhoneConfirmationNeed = await this.isPhoneConfirmation();
 

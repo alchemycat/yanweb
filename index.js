@@ -285,6 +285,8 @@ async function main(
 		)}`,
 	);
 
+	await page.waitForTimeout(5000);
+
 	//здесь уже начинается проверка
 
 	let result = [];
