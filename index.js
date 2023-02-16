@@ -14,10 +14,12 @@ const { Session } = require("./modules/Session");
 const { Google } = require("./modules/Google");
 const { Yandex } = require("./modules/Yandex");
 const { Telegram } = require("./modules/Telegram");
+const { Captcha } = require("./modules/Captcha");
 const { sleep } = require("./modules/sleep");
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
+const captchaAPI = process.env.CAPTCHA_API;
 
 async function init() {
 	if (cluster.isMaster) {
@@ -148,6 +150,7 @@ async function main(
 	const google = new Google();
 	const yandex = new Yandex(token);
 	const telegram = new Telegram(telegramToken, telegramChatID);
+	const captcha = new Captcha(captchaAPI, "yandexwave");
 
 	await yandex.getUserID();
 
@@ -198,6 +201,8 @@ async function main(
 
 	await page.reload();
 
+	//Textinput-Hint_state_error
+
 	let isLoginFieldExist = false;
 
 	try {
@@ -212,114 +217,7 @@ async function main(
 
 	//если переменная true тогда нужно выполнить логин
 	if (isLoginFieldExist) {
-		try {
-			await page.click("[data-id='button-all']", { timeout: 4000 });
-		} catch {}
-
-		await page.type("#passp-field-login", login);
-
-		await page.click(".passp-sign-in-button button");
-
-		await page.waitForSelector("[name='passwd']");
-
-		await page.type("[name='passwd']", pass);
-
-		await page.click(".passp-sign-in-button button");
-
-		try {
-			let tryCounter = 0;
-
-			await page.waitForSelector(
-				"[data-t='challenge_sumbit_phone-confirmation']",
-				{
-					timeout: 5000,
-					visible: true,
-				},
-			);
-
-			await page.click(".Button2_type_submit");
-
-			let isPhone;
-
-			while (!isPhone && tryCounter < 3) {
-				tryCounter++;
-				if (tryCounter >= 2) {
-					console.log("Код веден не верно, введите код повторно");
-				}
-				isPhone = await checkPhoneConfirmation();
-				await sleep(2000);
-				console.log(tryCounter);
-			}
-
-			if (isPhone) {
-				console.log(`${chalk.bold(thread_name)} Код введен верно`);
-			} else {
-				return console.log(`${chalk.bold(thread_name)} Не удалось ввести код`);
-			}
-		} catch {}
-
-		async function checkPhoneConfirmation() {
-			try {
-				const isExist = await page.waitForSelector("#passp-field-phoneCode", {
-					timeout: 5000,
-					visible: true,
-				});
-
-				if (!isExist) return true;
-
-				const code = await telegram.getCode(thread_name, loginName);
-
-				await page.type("#passp-field-phoneCode", code);
-
-				await page.click(".Button2_type_submit");
-
-				await page.waitForSelector(".UserID-Account", {
-					timeout: 5000,
-				});
-
-				return true;
-			} catch (err) {
-				return false;
-			}
-		}
-
-		try {
-			await page.waitForSelector("[name='captcha_answer']", { timeout: 5000 });
-			console.log(`${chalk.bold(thread_name)} Капча найдена`);
-			await page.waitForTimeout(20000);
-		} catch {}
-
-		let questionField;
-
-		try {
-			questionField = await page.waitForSelector("#passp-field-question", {
-				timeout: 5000,
-			});
-		} catch {}
-
-		if (questionField) {
-			await questionField.type(answer);
-			await page.waitForTimeout(1000);
-			await page.click(".Button2_type_submit");
-		}
-
-		await page.waitForTimeout(5000);
-
-		session
-			.saveSession()
-			.then(() => {
-				console.log(
-					`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`,
-				);
-			})
-			.catch((err) => {
-				console.log(err);
-				console.log(
-					`${chalk.bold(
-						thread_name,
-					)} Не удалось сохранить профиль для аккаунта: ${login}`,
-				);
-			});
+		await login();
 	}
 
 	let selectAccount = false;
