@@ -8,7 +8,6 @@ const figlet = require("figlet");
 const gradient = require("gradient-string");
 const schedule = require("node-schedule");
 const chalk = require("chalk");
-const axios = require("axios");
 require("dotenv").config();
 
 //Мои модули
@@ -24,23 +23,25 @@ const telegramChatID = process.env.TELEGRAM_CHAT_ID;
 const captchaAPI = process.env.CAPTCHA_API;
 
 const use_schedule = false; // использовать планировщик или нет
-const threads_count = 1; // количество потоков
-
-let isWorking = false;
+const threads_count = 2; // количество потоков
 
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 
-if (!fs.existsSync(`${__dirname}/state.json`)) {
-	fs.writeFileSync(`${__dirname}/state.json`, '{"working": false}');
+const stateFilePath = `${__dirname}/state.json`;
+
+if (!fs.existsSync(stateFilePath)) {
+	fs.writeFileSync(stateFilePath, '{"isWorking": false}');
 }
 
-const state = fs.readFileSync(`${__dirname}/state.json`, { encoding: "utf-8" });
+const state = fs.readFileSync(stateFilePath, { encoding: "utf-8" });
+
+let { isWorking } = JSON.parse(state);
 
 // `0 8,20 * * *`
 
-if (use_schedule) {
-	const job = schedule.scheduleJob(`*/20 * * * *`, function () {
+if (use_schedule && !isWorking) {
+	const job = schedule.scheduleJob(`*/7 * * * *`, function () {
 		init();
 	});
 	const date = new Date(
@@ -65,6 +66,8 @@ async function init() {
 				resolve();
 			});
 		});
+
+		fs.writeFileSync(stateFilePath, '{"isWorking": true}');
 
 		//главный поток начинает работу, инициализирует данные
 		// const threads_count = prompt(chalk.bold("Количество потоков? "));
@@ -124,8 +127,10 @@ async function init() {
 
 		cluster.on("exit", (worker) => {
 			let workersLength = Object.keys(cluster.workers).length;
-			//if workers length === 0 ? isWorking = false
 			console.log(`Закрываю поток`);
+			if (!workersLength) {
+				fs.writeFileSync(stateFilePath, '{"isWorking": false}');
+			}
 		});
 	} else {
 		process.on("message", async (msg) => {
@@ -292,7 +297,7 @@ async function main(
 	let isLoggedIn = false;
 
 	try {
-		const captchaButton = await yandexWeb.waitForSelector(
+		const captchaButton = await page.waitForSelector(
 			".CheckboxCaptcha-Button",
 			{
 				timeout: 5000,
@@ -315,9 +320,7 @@ async function main(
 				".CaptchaButton.CaptchaButton_view_action",
 			);
 		}
-	} catch {
-		console.log("advanced captcha not found");
-	}
+	} catch {}
 
 	try {
 		isLoggedIn = await page.waitForSelector(".UserID-Account", {

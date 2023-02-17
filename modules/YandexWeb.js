@@ -357,69 +357,42 @@ class YandexWeb {
 		);
 
 		try {
-			const captchaButton = await page.waitForSelector(
-				".CheckboxCaptcha-Button",
+			const element = await this.page.waitForSelector(
+				".MirrorsAlert-Content, .MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer, .CheckboxCaptcha-Button",
 				{
 					timeout: 5000,
 					visible: true,
 				},
 			);
 
-			console.log("Капча найдена");
-
-			await captchaButton.click();
-
-			let isCaptchaExist = await this.checkCaptchaExist(
-				".AdvancedCaptcha-Image",
-			);
-
-			if (isCaptchaExist) {
-				await this.setCaptcha(
-					".Textinput_view_captcha .Textinput-Control",
-					".AdvancedCaptcha-Image",
-					".CaptchaButton.CaptchaButton_view_action",
-				);
-			}
-		} catch {
-			console.log("advanced captcha not found");
-		}
-
-		try {
-			const element = await this.page.waitForSelector(
-				".MirrorsAlert-Content, .MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
-				{
-					timeout: 4000,
-					visible: true,
-				},
-			);
-
 			const className = await this.page.evaluate((el) => el.className, element);
 
-			if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
-				const mainMirror = await this.yandex.getMainMirror(host);
-				host = mainMirror.host_id;
-				url = mainMirror.unicode_host_url;
+			// if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
+			// 	const mainMirror = await this.yandex.getMainMirror(host);
+			// 	host = mainMirror.host_id;
+			// 	url = mainMirror.unicode_host_url;
 
-				await this.page.goto(
-					`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
-				);
+			// 	await this.page.goto(
+			// 		`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+			// 	);
 
-				await this.page.waitForSelector(".MirrorsContent-Suggest", {
-					timeout: 4000,
-					visible: true,
-				});
+			// 	await this.page.waitForSelector(".MirrorsContent-Suggest", {
+			// 		timeout: 4000,
+			// 		visible: true,
+			// 	});
 
-				const notifcationText = await this.page.evaluate(() => {
-					const text = document.querySelector(".MirrorsAlert-Content");
-					if (text) {
-						return text.textContent;
-					} else {
-						return "Без переезда";
-					}
-				});
+			// 	const notifcationText = await this.page.evaluate(() => {
+			// 		const text = document.querySelector(".MirrorsAlert-Content");
+			// 		if (text) {
+			// 			return text.textContent;
+			// 		} else {
+			// 			return "Без переезда";
+			// 		}
+			// 	});
 
-				return [url, notifcationText];
-			} else if (
+			// 	return [url, notifcationText];
+			// } else
+			if (
 				/mirrorscontent\-suggest/i.test(className) ||
 				/mirrorsalert\-content/i.test(className)
 			) {
@@ -437,6 +410,42 @@ class YandexWeb {
 				});
 
 				return [url, notifcationText];
+			} else if (/captcha/i.test(className)) {
+				try {
+					console.log(`${chalk.bold(this.thread_name)} Капча найдена`);
+
+					await this.page.click(".CheckboxCaptcha-Button");
+
+					let isCaptchaExist = await this.checkCaptchaExist(
+						".AdvancedCaptcha-Image",
+					);
+
+					if (isCaptchaExist) {
+						const captchaResult = await this.setCaptcha(
+							".Textinput_view_captcha .Textinput-Control",
+							".AdvancedCaptcha-Image",
+							".CaptchaButton.CaptchaButton_view_action",
+						);
+						if (!captchaResult) return [url, "Ошибка"];
+
+						const notifcationText = await this.page.evaluate(() => {
+							const text = document.querySelector(".MirrorsAlert-Content");
+							// let resultText;
+							if (text) {
+								// if (/понятно,\sспасибо/.test(text.textContent)) {
+								// 	resultText = text.textContent.replace(/понятно,\sспасибо/i, "");
+								// }
+								return text.textContent;
+							} else {
+								return "Без переезда";
+							}
+						});
+
+						return [url, notifcationText];
+					}
+				} catch (err) {
+					console.log(err);
+				}
 			} else {
 				throw new Error("Информация о переезде не найдена");
 			}
