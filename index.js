@@ -1,11 +1,12 @@
 const puppeteer = require("puppeteer");
-const axios = require("axios");
+// const axios = require("axios");
 const fs = require("fs");
-const path = require("path");
+// const path = require("path");
 const prompt = require("prompt-sync")();
 const cluster = require("node:cluster");
 const figlet = require("figlet");
 const gradient = require("gradient-string");
+const schedule = require("node-schedule");
 const chalk = require("chalk");
 require("dotenv").config();
 
@@ -20,6 +21,23 @@ const { YandexWeb } = require("./modules/YandexWeb");
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
 const captchaAPI = process.env.CAPTCHA_API;
+
+const use_schedule = false; // использовать планировщик или нет
+const threads_count = 1; // количество потоков
+
+if (use_schedule) {
+	const job = schedule.scheduleJob(`0 8,20 * * *`, function () {
+		init();
+	});
+	const date = new Date(
+		job.pendingInvocations[0].fireDate,
+	).toLocaleTimeString();
+
+	console.log(new Date().toLocaleTimeString());
+	console.log(`Запуск запланирован на: ${date}`);
+} else {
+	init();
+}
 
 async function init() {
 	if (cluster.isMaster) {
@@ -36,7 +54,8 @@ async function init() {
 		});
 
 		//главный поток начинает работу, инициализирует данные
-		const threads_count = prompt(chalk.bold("Количество потоков? "));
+		// const threads_count = prompt(chalk.bold("Количество потоков? "));
+		console.log(`Количество потоков: ${threads_count}`);
 		let global_counter = 0;
 
 		if (!fs.existsSync(`${__dirname}/profiles`)) {
@@ -138,7 +157,7 @@ async function init() {
 	}
 }
 
-init();
+// init();
 
 async function main(
 	sessionFolder,
@@ -161,17 +180,17 @@ async function main(
 
 	const tempHost = await yandex.getHosts();
 
-	tempHost.forEach(host => {
+	tempHost.forEach((host) => {
 		if (!host.main_mirror) {
 			hosts.push(host);
 		}
-	})
+	});
 
 	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
 
 	const browser = await puppeteer.launch({
-		headless: false,
+		headless: true,
 		slowMo: 20,
 		ignoreHTTPSErrors: true,
 		ignoreDefaultArgs: ["--enable-automation"],
@@ -241,7 +260,6 @@ async function main(
 		if (!isLoginSuccess) return false;
 	}
 
-
 	let selectAccount = false;
 
 	try {
@@ -306,11 +324,13 @@ async function main(
 		if (checkResult) {
 			result.push(checkResult);
 			if (/Невозможно перенести сайт/m.test(checkResult[1])) {
-				console.log(`${chalk.bold(thread_name)} Невозможно перенести сайт: ${url}`);
+				console.log(
+					`${chalk.bold(thread_name)} Невозможно перенести сайт: ${url}`,
+				);
 				await telegram.sendMessage(`Невозможно перенести сайт: ${url}`);
 			}
 		}
-		console.log(checkResult);
+		// console.log(checkResult);
 		await page.waitForTimeout(1000);
 		console.log(
 			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
@@ -318,8 +338,6 @@ async function main(
 			)}`,
 		);
 	}
-
-
 
 	await google.sendData(result, loginName, url);
 
