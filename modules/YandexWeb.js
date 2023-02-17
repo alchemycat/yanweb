@@ -37,9 +37,9 @@ class YandexWeb {
 		}
 	}
 
-	async checkCaptchaExist() {
+	async checkCaptchaExist(selector) {
 		try {
-			await this.page.waitForSelector("[name='captcha_answer']", {
+			await this.page.waitForSelector(selector, {
 				timeout: 5000,
 				visible: true,
 			});
@@ -50,7 +50,7 @@ class YandexWeb {
 		}
 	}
 
-	async setCaptcha() {
+	async setCaptcha(answerSelector, imageSelector, buttonSelector) {
 		try {
 			let tryCounter = 0;
 			let isCaptchaExist = true;
@@ -60,24 +60,24 @@ class YandexWeb {
 
 				console.log(`${chalk.bold(this.thread_name)} Капча найдена`);
 
-				const image = await this.getCaptchaImage();
+				const image = await this.getCaptchaImage(imageSelector);
 
 				if (image) {
 					const solution = await this.captcha.resolveCaptcha(image); // Отправляем капчу в capmonster cloud
 
-					const input = await this.page.waitForSelector(
-						'input[name="captcha_answer"]',
-						{ visible: true },
-					);
+					console.log("solution:", solution);
+					const input = await this.page.waitForSelector(answerSelector, {
+						visible: true,
+					});
 
 					await input.click({ clickCount: 3 });
 					await input.press("Backspace");
 
-					await this.page.type('input[name="captcha_answer"]', solution);
+					await this.page.type(answerSelector, solution);
 
 					await this.page.waitForTimeout(1000);
 
-					await this.page.click(".passp-sign-in-button button");
+					await this.page.click(buttonSelector);
 				}
 
 				await sleep(5000);
@@ -87,7 +87,7 @@ class YandexWeb {
 						this.thread_name,
 					)} Повторно проверяю существование капчи`,
 				);
-				isCaptchaExist = await this.checkCaptchaExist();
+				isCaptchaExist = await this.checkCaptchaExist(answerSelector);
 			}
 
 			if (isCaptchaExist) {
@@ -102,13 +102,13 @@ class YandexWeb {
 		}
 	}
 
-	async getCaptchaImage() {
+	async getCaptchaImage(selector) {
 		try {
-			const captchaSrc = await this.page.evaluate(() => {
-				const img = document.querySelector(".captcha__image");
+			const captchaSrc = await this.page.evaluate((selector) => {
+				const img = document.querySelector(selector);
 				if (!img) return false;
 				return img.src;
-			});
+			}, selector);
 
 			if (!captchaSrc) return false;
 
@@ -273,10 +273,16 @@ class YandexWeb {
 			return false;
 		}
 
-		let isCaptchaExist = await this.checkCaptchaExist();
+		let isCaptchaExist = await this.checkCaptchaExist(
+			"[name='captcha_answer']",
+		);
 
 		if (isCaptchaExist) {
-			await this.setCaptcha();
+			await this.setCaptcha(
+				'input[name="captcha_answer"]',
+				".captcha__image",
+				".passp-sign-in-button button",
+			);
 		}
 
 		try {
@@ -351,6 +357,34 @@ class YandexWeb {
 		);
 
 		try {
+			const captchaButton = await page.waitForSelector(
+				".CheckboxCaptcha-Button",
+				{
+					timeout: 5000,
+					visible: true,
+				},
+			);
+
+			console.log("Капча найдена");
+
+			await captchaButton.click();
+
+			let isCaptchaExist = await this.checkCaptchaExist(
+				".AdvancedCaptcha-Image",
+			);
+
+			if (isCaptchaExist) {
+				await this.setCaptcha(
+					".Textinput_view_captcha .Textinput-Control",
+					".AdvancedCaptcha-Image",
+					".CaptchaButton.CaptchaButton_view_action",
+				);
+			}
+		} catch {
+			console.log("advanced captcha not found");
+		}
+
+		try {
 			const element = await this.page.waitForSelector(
 				".MirrorsAlert-Content, .MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
 				{
@@ -390,9 +424,7 @@ class YandexWeb {
 				/mirrorsalert\-content/i.test(className)
 			) {
 				const notifcationText = await this.page.evaluate(() => {
-					const text = document.querySelector(
-						".MirrorsAlert-Content",
-					);
+					const text = document.querySelector(".MirrorsAlert-Content");
 					// let resultText;
 					if (text) {
 						// if (/понятно,\sспасибо/.test(text.textContent)) {

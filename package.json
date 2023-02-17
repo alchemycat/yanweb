@@ -17,6 +17,9 @@
     "gradient-string": "^2.0.2",
     "node-schedule": "^2.1.1",
     "prompt-sync": "^4.2.0",
-    "puppeteer": "^19.6.3"
+    "puppeteer": "^19.6.3",
+    "puppeteer-extra": "^3.3.4",
+    "puppeteer-extra-plugin-adblocker": "^2.13.5",
+    "puppeteer-extra-plugin-stealth": "^2.11.1"
   }
 }

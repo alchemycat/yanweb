@@ -1,13 +1,14 @@
-const puppeteer = require("puppeteer");
-// const axios = require("axios");
+const { executablePath } = require("puppeteer");
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const AdblockerPlugin = require("puppeteer-extra-plugin-adblocker");
 const fs = require("fs");
-// const path = require("path");
-const prompt = require("prompt-sync")();
 const cluster = require("node:cluster");
 const figlet = require("figlet");
 const gradient = require("gradient-string");
 const schedule = require("node-schedule");
 const chalk = require("chalk");
+const axios = require("axios");
 require("dotenv").config();
 
 //Мои модули
@@ -25,15 +26,27 @@ const captchaAPI = process.env.CAPTCHA_API;
 const use_schedule = false; // использовать планировщик или нет
 const threads_count = 1; // количество потоков
 
+let isWorking = false;
+
+puppeteer.use(StealthPlugin());
+puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
+
+if (!fs.existsSync(`${__dirname}/state.json`)) {
+	fs.writeFileSync(`${__dirname}/state.json`, '{"working": false}');
+}
+
+const state = fs.readFileSync(`${__dirname}/state.json`, { encoding: "utf-8" });
+
+// `0 8,20 * * *`
+
 if (use_schedule) {
-	const job = schedule.scheduleJob(`0 8,20 * * *`, function () {
+	const job = schedule.scheduleJob(`*/20 * * * *`, function () {
 		init();
 	});
 	const date = new Date(
 		job.pendingInvocations[0].fireDate,
 	).toLocaleTimeString();
 
-	console.log(new Date().toLocaleTimeString());
 	console.log(`Запуск запланирован на: ${date}`);
 } else {
 	init();
@@ -110,6 +123,8 @@ async function init() {
 		});
 
 		cluster.on("exit", (worker) => {
+			let workersLength = Object.keys(cluster.workers).length;
+			//if workers length === 0 ? isWorking = false
 			console.log(`Закрываю поток`);
 		});
 	} else {
@@ -190,10 +205,11 @@ async function main(
 		return console.log("Не удалось получить данные о доменах на аккаунте");
 
 	const browser = await puppeteer.launch({
-		headless: true,
+		headless: false,
 		slowMo: 20,
 		ignoreHTTPSErrors: true,
 		ignoreDefaultArgs: ["--enable-automation"],
+		executablePath: executablePath(),
 	});
 
 	const page = await browser.newPage();
@@ -276,6 +292,34 @@ async function main(
 	let isLoggedIn = false;
 
 	try {
+		const captchaButton = await yandexWeb.waitForSelector(
+			".CheckboxCaptcha-Button",
+			{
+				timeout: 5000,
+				visible: true,
+			},
+		);
+
+		console.log("Капча найдена");
+
+		await captchaButton.click();
+
+		let isCaptchaExist = await yandexWeb.checkCaptchaExist(
+			".AdvancedCaptcha-Image",
+		);
+
+		if (isCaptchaExist) {
+			await yandexWeb.setCaptcha(
+				".Textinput_view_captcha .Textinput-Control",
+				".AdvancedCaptcha-Image",
+				".CaptchaButton.CaptchaButton_view_action",
+			);
+		}
+	} catch {
+		console.log("advanced captcha not found");
+	}
+
+	try {
 		isLoggedIn = await page.waitForSelector(".UserID-Account", {
 			timeout: 5000,
 		});
@@ -309,8 +353,6 @@ async function main(
 			loginName,
 		)}`,
 	);
-
-	await page.waitForTimeout(5000);
 
 	//здесь уже начинается проверка
 
