@@ -3,9 +3,9 @@ const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const AdblockerPlugin = require("puppeteer-extra-plugin-adblocker");
 const fs = require("fs");
-const cluster = require("node:cluster");
-const figlet = require("figlet");
-const gradient = require("gradient-string");
+// const cluster = require("node:cluster");
+// const figlet = require("figlet");
+// const gradient = require("gradient-string");
 const schedule = require("node-schedule");
 const chalk = require("chalk");
 require("dotenv").config();
@@ -28,20 +28,20 @@ const threads_count = 1; // количество потоков
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 
-const stateFilePath = `${__dirname}/state.json`;
+// const stateFilePath = `${__dirname}/state.json`;
 
-if (!fs.existsSync(stateFilePath)) {
-	fs.writeFileSync(stateFilePath, '{"isWorking": false}');
-}
+// if (!fs.existsSync(stateFilePath)) {
+// fs.writeFileSync(stateFilePath, '{"isWorking": false}');
+// }
 
-const state = fs.readFileSync(stateFilePath, { encoding: "utf-8" });
+// const state = fs.readFileSync(stateFilePath, { encoding: "utf-8" });
 
-let { isWorking } = JSON.parse(state);
+// let { isWorking } = JSON.parse(state);
 
 // `0 4,15 * * *`
 
-if (use_schedule && !isWorking) {
-	const job = schedule.scheduleJob(`*/20 * * * *`, function () {
+if (use_schedule) {
+	const job = schedule.scheduleJob(`*/60 * * * *`, function () {
 		init();
 	});
 	const date = new Date(
@@ -54,127 +54,134 @@ if (use_schedule && !isWorking) {
 }
 
 async function init() {
-	if (cluster.isMaster) {
-		await new Promise((resolve) => {
-			figlet("Yandex Webmaster Checker", function (err, data) {
-				if (err) {
-					console.log("Что-то пошло не так...");
-					console.dir(err);
-					return;
-				}
-				console.log(gradient.retro(data));
-				resolve();
-			});
-		});
+	// if (cluster.isMaster) {
+	// await new Promise((resolve) => {
+	// 	figlet("Yandex Webmaster Checker", function (err, data) {
+	// 		if (err) {
+	// 			console.log("Что-то пошло не так...");
+	// 			console.dir(err);
+	// 			return;
+	// 		}
+	// 		console.log(gradient.retro(data));
+	// 		resolve();
+	// 	});
+	// });
 
-		fs.writeFileSync(stateFilePath, '{"isWorking": true}');
+	// fs.writeFileSync(stateFilePath, '{"isWorking": true}');
 
-		//главный поток начинает работу, инициализирует данные
-		// const threads_count = prompt(chalk.bold("Количество потоков? "));
-		console.log(`Количество потоков: ${threads_count}`);
-		let global_counter = 0;
+	//главный поток начинает работу, инициализирует данные
+	// const threads_count = prompt(chalk.bold("Количество потоков? "));
+	// console.log(`Количество потоков: ${threads_count}`);
+	let global_counter = 0;
 
-		if (!fs.existsSync(`${__dirname}/profiles`)) {
-			fs.mkdirSync(`${__dirname}/profiles`);
-		}
-
-		//Валидация
-		if (!fs.existsSync(`${__dirname}/data.json`))
-			return console.log(
-				`Файл data.json не найден. Создайте файл по пути: ${__dirname}/data.json`,
-			);
-
-		let data = fs.readFileSync(`${__dirname}/data.json`, { encoding: "utf-8" });
-
-		if (!data) return console.log("В файле data.json нету данных.");
-
-		try {
-			data = JSON.parse(data);
-		} catch {
-			return console.log(
-				"Некорректный формат данных в файле data.json, добавьте данные в json формате.",
-			);
-		}
-
-		if (!data.length) return console.log("В файле data.json нету данных.");
-		/////-----
-
-		for (let i = 0; i < threads_count; i++) {
-			//вызываем воркеры
-			const worker = await cluster.fork();
-			global_counter++;
-			await worker.send({
-				global_counter,
-				data,
-				thread_name: `[Поток ${i + 1}]`,
-			});
-		}
-
-		cluster.on("message", async (worker, msg, handle) => {
-			if (msg.message === "get_data") {
-				if (global_counter < data.length) {
-					global_counter++;
-					await worker.send({
-						global_counter,
-						data: data,
-						thread_name: msg.thread_name,
-					});
-				} else {
-					worker.kill();
-				}
-			}
-		});
-
-		cluster.on("exit", (worker) => {
-			let workersLength = Object.keys(cluster.workers).length;
-			console.log(`Закрываю поток`);
-			if (!workersLength) {
-				fs.writeFileSync(stateFilePath, '{"isWorking": false}');
-			}
-		});
-	} else {
-		process.on("message", async (msg) => {
-			const { global_counter, data, thread_name } = msg;
-
-			if (!data[global_counter - 1]) {
-				process.exit();
-			} else {
-				const { token, login, pass, answer, url } = data[global_counter - 1];
-
-				let loginName = login;
-
-				if (/.*(?=@)/.test(login)) {
-					loginName = login.match(/.*(?=@)/)[0];
-				}
-
-				const sessionFolder = `${__dirname}/profiles/${loginName}`;
-
-				if (!fs.existsSync(sessionFolder)) {
-					fs.mkdirSync(sessionFolder);
-				}
-
-				let result = await main(
-					sessionFolder,
-					token,
-					login,
-					pass,
-					answer,
-					url,
-					thread_name,
-					loginName,
-				);
-
-				if (!result)
-					console.log(
-						`Для аккаунта: ${login} не удалось выполнить проверку доменов`,
-					);
-
-				console.log(`${chalk.bold(thread_name)} Проверка завершена`);
-
-				process.send({ message: "get_data", thread_name });
-			}
-		});
+	if (!fs.existsSync(`${__dirname}/profiles`)) {
+		fs.mkdirSync(`${__dirname}/profiles`);
 	}
+
+	//Валидация
+	if (!fs.existsSync(`${__dirname}/data.json`))
+		return console.log(
+			`Файл data.json не найден. Создайте файл по пути: ${__dirname}/data.json`,
+		);
+
+	let data = fs.readFileSync(`${__dirname}/data.json`, { encoding: "utf-8" });
+
+	if (!data) return console.log("В файле data.json нету данных.");
+
+	try {
+		data = JSON.parse(data);
+	} catch {
+		return console.log(
+			"Некорректный формат данных в файле data.json, добавьте данные в json формате.",
+		);
+	}
+
+	if (!data.length) return console.log("В файле data.json нету данных.");
+	/////-----
+
+	// for (let i = 0; i < threads_count; i++) {
+	// 	//вызываем воркеры
+	// 	const worker = await cluster.fork();
+	// 	global_counter++;
+	// 	await worker.send({
+	// 		global_counter,
+	// 		data,
+	// 		thread_name: `[Поток ${i + 1}]`,
+	// 	});
+	// }
+
+	// cluster.on("message", async (worker, msg, handle) => {
+	// 	if (msg.message === "get_data") {
+	// 		if (global_counter < data.length) {
+	// 			global_counter++;
+	// 			await worker.send({
+	// 				global_counter,
+	// 				data: data,
+	// 				thread_name: msg.thread_name,
+	// 			});
+	// 		} else {
+	// 			worker.kill();
+	// 		}
+	// 	}
+	// });
+
+	// cluster.on("exit", (worker) => {
+	// 	let workersLength = Object.keys(cluster.workers).length;
+	// 	console.log('workers length:', workersLength);
+	// 	console.log(`Закрываю поток`);
+	// 	if (!workersLength) {
+	// 		fs.writeFileSync(stateFilePath, '{"isWorking": false}');
+	// 		process.exit();
+	// 	}
+	// });
+	// } else {
+	// process.on("message", async (msg) => {
+	// const { global_counter, data, thread_name } = msg;
+
+	// if (!data[global_counter - 1]) {
+	// process.exit();
+	// } else {
+	// const { token, login, pass, answer, url } = data[global_counter - 1];
+
+	for (let i = 0; i < data.length; i++) {
+		const thread_name = `[Поток 1]`;
+		const { token, login, pass, answer, url } = data[global_counter];
+
+		let loginName = login;
+
+		if (/.*(?=@)/.test(login)) {
+			loginName = login.match(/.*(?=@)/)[0];
+		}
+
+		const sessionFolder = `${__dirname}/profiles/${loginName}`;
+
+		if (!fs.existsSync(sessionFolder)) {
+			fs.mkdirSync(sessionFolder);
+		}
+
+		let result = await main(
+			sessionFolder,
+			token,
+			login,
+			pass,
+			answer,
+			url,
+			thread_name,
+			loginName,
+		);
+
+		if (!result)
+			console.log(
+				`Для аккаунта: ${login} не удалось выполнить проверку доменов`,
+			);
+
+		console.log(`${chalk.bold(thread_name)} Проверка завершена`);
+	}
+
+	// process.send({ message: "get_data", thread_name });
+	// }
+	// });
+	// }
 }
 
 // init();
@@ -301,7 +308,7 @@ async function main(
 
 		try {
 			const captchaButton = await page.waitForSelector(
-				".CheckboxCaptcha-Anchor",
+				".CheckboxCaptcha-Checkbox",
 				{
 					timeout: 5000,
 					visible: true,
