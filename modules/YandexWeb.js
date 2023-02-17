@@ -340,7 +340,7 @@ class YandexWeb {
 
 		try {
 			const captchaButton = await this.page.waitForSelector(
-				".CheckboxCaptcha-Button",
+				".CheckboxCaptcha-Anchor",
 				{
 					timeout: 5000,
 					visible: true,
@@ -412,9 +412,9 @@ class YandexWeb {
 				return [url, notifcationText];
 			} else if (/captcha/i.test(className)) {
 				try {
-					await this.page.click(".CheckboxCaptcha-Button");
+					await this.page.click(".CheckboxCaptcha-Anchor");
 
-					await this.page.waitForTimeout(5000);
+					await this.page.waitForTimeout(3000);
 
 					let isCaptchaExist = await this.checkCaptchaExist(
 						".AdvancedCaptcha-Image",

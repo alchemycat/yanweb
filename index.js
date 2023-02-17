@@ -41,7 +41,7 @@ let { isWorking } = JSON.parse(state);
 // `0 4,15 * * *`
 
 if (use_schedule && !isWorking) {
-	const job = schedule.scheduleJob(`*/60 * * * *`, function () {
+	const job = schedule.scheduleJob(`*/20 * * * *`, function () {
 		init();
 	});
 	const date = new Date(
@@ -301,7 +301,7 @@ async function main(
 
 		try {
 			const captchaButton = await page.waitForSelector(
-				".CheckboxCaptcha-Button",
+				".CheckboxCaptcha-Anchor",
 				{
 					timeout: 5000,
 					visible: true,
