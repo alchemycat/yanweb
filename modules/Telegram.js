@@ -21,6 +21,7 @@ class Telegram {
 
     async getCode(thread_name, loginName) {
         return await new Promise(async (resolve) => {
+            let counter = 0;
             let uuid = crypto.randomUUID();
             this.sendMessage(
                 `При логине в аккаунт: ${loginName} требуется код подтверждения. \nВведите ответ в таком ввиде\n${uuid}:код `,
@@ -29,7 +30,8 @@ class Telegram {
             let code = false;
             let messages;
     
-            while (!code) {
+            while (!code && counter < 25) {
+                counter++;
                 console.log(`${chalk.bold(thread_name)} Ожидаю сообщение с кодом`);
                 messages = await axios
                     .get(
@@ -44,8 +46,11 @@ class Telegram {
                 });
                 await sleep(5000);
             }
-    
-            resolve(code.match(/(?<=\:).*/)[0]);
+            if (code) {
+                resolve(code.match(/(?<=\:).*/)[0]);
+            } else {
+                resolve(false);
+            }
         });
     }
 }

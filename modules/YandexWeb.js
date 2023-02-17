@@ -195,6 +195,8 @@ class YandexWeb {
 				this.loginName,
 			);
 
+			if (!code) return false;
+
 			await this.page.type("#passp-field-phoneCode", code);
 
 			await this.page.click(".Button2_type_submit");
@@ -334,6 +336,32 @@ class YandexWeb {
 				return false;
 			}
 		}
+
+		try {
+			const captchaButton = await this.page.waitForSelector(
+				".CheckboxCaptcha-Button",
+				{
+					timeout: 5000,
+					visible: true,
+				},
+			);
+
+			console.log("Капча найдена");
+
+			await captchaButton.click();
+
+			let isCaptchaExist = await this.checkCaptchaExist(
+				".AdvancedCaptcha-Image",
+			);
+
+			if (isCaptchaExist) {
+				await this.setCaptcha(
+					".Textinput_view_captcha .Textinput-Control",
+					".AdvancedCaptcha-Image",
+					".CaptchaButton.CaptchaButton_view_action",
+				);
+			}
+		} catch {}
 
 		//нажимаем кнопку пропустить если нам предлагает установить аватар
 		try {
