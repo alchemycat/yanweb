@@ -16,7 +16,6 @@ const { Yandex } = require("./modules/Yandex");
 const { Telegram } = require("./modules/Telegram");
 const { Captcha } = require("./modules/Captcha");
 const { YandexWeb } = require("./modules/YandexWeb");
-const { sleep } = require("./modules/sleep");
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
@@ -158,7 +157,15 @@ async function main(
 
 	await yandex.getUserID();
 
-	const hosts = await yandex.getHosts();
+	let hosts = [];
+
+	const tempHost = await yandex.getHosts();
+
+	tempHost.forEach(host => {
+		if (!host.main_mirror) {
+			hosts.push(host);
+		}
+	})
 
 	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
@@ -295,11 +302,15 @@ async function main(
 		let host = hosts[i].host_id;
 		let url = hosts[i].unicode_host_url;
 
-		//check function
 		const checkResult = await yandexWeb.checkHost(host, url);
 		if (checkResult) {
 			result.push(checkResult);
+			if (/Невозможно перенести сайт/m.test(checkResult[1])) {
+				console.log(`${chalk.bold(thread_name)} Невозможно перенести сайт: ${url}`);
+				await telegram.sendMessage(`Невозможно перенести сайт: ${url}`);
+			}
 		}
+		console.log(checkResult);
 		await page.waitForTimeout(1000);
 		console.log(
 			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(

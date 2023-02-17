@@ -352,7 +352,7 @@ class YandexWeb {
 
 		try {
 			const element = await this.page.waitForSelector(
-				".MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
+				".MirrorsAlert-Content, .MirrorsContent-Suggest, .MirrorsActions-UnstickDisclaimer",
 				{
 					timeout: 4000,
 					visible: true,
@@ -365,11 +365,39 @@ class YandexWeb {
 				const mainMirror = await this.yandex.getMainMirror(host);
 				host = mainMirror.host_id;
 				url = mainMirror.unicode_host_url;
-				await this.checkHost(host, url);
-			} else if (/mirrorscontent\-suggest/i.test(className)) {
+
+				await this.page.goto(
+					`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
+				);
+
+				await this.page.waitForSelector(".MirrorsContent-Suggest", {
+					timeout: 4000,
+					visible: true,
+				});
+
 				const notifcationText = await this.page.evaluate(() => {
 					const text = document.querySelector(".MirrorsAlert-Content");
 					if (text) {
+						return text.textContent;
+					} else {
+						return "Без переезда";
+					}
+				});
+
+				return [url, notifcationText];
+			} else if (
+				/mirrorscontent\-suggest/i.test(className) ||
+				/mirrorsalert\-content/i.test(className)
+			) {
+				const notifcationText = await this.page.evaluate(() => {
+					const text = document.querySelector(
+						".MirrorsAlert-Content",
+					);
+					// let resultText;
+					if (text) {
+						// if (/понятно,\sспасибо/.test(text.textContent)) {
+						// 	resultText = text.textContent.replace(/понятно,\sспасибо/i, "");
+						// }
 						return text.textContent;
 					} else {
 						return "Без переезда";
@@ -381,6 +409,7 @@ class YandexWeb {
 				throw new Error("Информация о переезде не найдена");
 			}
 		} catch (err) {
+			console.log(err);
 			return [url, "Ошибка"];
 		}
 	}
