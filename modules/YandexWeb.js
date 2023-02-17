@@ -65,7 +65,6 @@ class YandexWeb {
 				if (image) {
 					const solution = await this.captcha.resolveCaptcha(image); // Отправляем капчу в capmonster cloud
 
-					// console.log("solution:", solution);
 					const input = await this.page.waitForSelector(answerSelector, {
 						visible: true,
 					});
@@ -280,11 +279,13 @@ class YandexWeb {
 		);
 
 		if (isCaptchaExist) {
-			await this.setCaptcha(
+			const captchaResult = await this.setCaptcha(
 				'input[name="captcha_answer"]',
 				".captcha__image",
 				".passp-sign-in-button button",
 			);
+
+			if (!captchaResult) return false;
 		}
 
 		try {
@@ -395,42 +396,13 @@ class YandexWeb {
 
 			const className = await this.page.evaluate((el) => el.className, element);
 
-			// if (/mirrorsactions\-unstickdisclaimer/i.test(className)) {
-			// 	const mainMirror = await this.yandex.getMainMirror(host);
-			// 	host = mainMirror.host_id;
-			// 	url = mainMirror.unicode_host_url;
-
-			// 	await this.page.goto(
-			// 		`https://webmaster.yandex.com/site/${host}/indexing/mirrors/`,
-			// 	);
-
-			// 	await this.page.waitForSelector(".MirrorsContent-Suggest", {
-			// 		timeout: 4000,
-			// 		visible: true,
-			// 	});
-
-			// 	const notifcationText = await this.page.evaluate(() => {
-			// 		const text = document.querySelector(".MirrorsAlert-Content");
-			// 		if (text) {
-			// 			return text.textContent;
-			// 		} else {
-			// 			return "Без переезда";
-			// 		}
-			// 	});
-
-			// 	return [url, notifcationText];
-			// } else
 			if (
 				/mirrorscontent\-suggest/i.test(className) ||
 				/mirrorsalert\-content/i.test(className)
 			) {
 				const notifcationText = await this.page.evaluate(() => {
 					const text = document.querySelector(".MirrorsAlert-Content");
-					// let resultText;
 					if (text) {
-						// if (/понятно,\sспасибо/.test(text.textContent)) {
-						// 	resultText = text.textContent.replace(/понятно,\sспасибо/i, "");
-						// }
 						return text.textContent;
 					} else {
 						return "Без переезда";
@@ -441,6 +413,8 @@ class YandexWeb {
 			} else if (/captcha/i.test(className)) {
 				try {
 					await this.page.click(".CheckboxCaptcha-Button");
+
+					await this.page.waitForTimeout(5000);
 
 					let isCaptchaExist = await this.checkCaptchaExist(
 						".AdvancedCaptcha-Image",
@@ -456,11 +430,7 @@ class YandexWeb {
 
 						const notifcationText = await this.page.evaluate(() => {
 							const text = document.querySelector(".MirrorsAlert-Content");
-							// let resultText;
 							if (text) {
-								// if (/понятно,\sспасибо/.test(text.textContent)) {
-								// 	resultText = text.textContent.replace(/понятно,\sспасибо/i, "");
-								// }
 								return text.textContent;
 							} else {
 								return "Без переезда";
@@ -476,7 +446,6 @@ class YandexWeb {
 				throw new Error("Информация о переезде не найдена");
 			}
 		} catch (err) {
-			console.log(err);
 			return [url, "Ошибка"];
 		}
 	}

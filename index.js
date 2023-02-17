@@ -22,8 +22,8 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
 const captchaAPI = process.env.CAPTCHA_API;
 
-const use_schedule = false; // использовать планировщик или нет
-const threads_count = 2; // количество потоков
+const use_schedule = true; // использовать планировщик или нет
+const threads_count = 1; // количество потоков
 
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
@@ -38,10 +38,10 @@ const state = fs.readFileSync(stateFilePath, { encoding: "utf-8" });
 
 let { isWorking } = JSON.parse(state);
 
-// `0 8,20 * * *`
+// `0 4,15 * * *`
 
 if (use_schedule && !isWorking) {
-	const job = schedule.scheduleJob(`*/7 * * * *`, function () {
+	const job = schedule.scheduleJob(`*/60 * * * *`, function () {
 		init();
 	});
 	const date = new Date(
@@ -218,175 +218,191 @@ async function main(
 	});
 
 	const page = await browser.newPage();
-
-	const yandexWeb = new YandexWeb(
-		page,
-		captcha,
-		telegram,
-		yandex,
-		thread_name,
-		loginName,
-		login,
-		pass,
-		answer,
-	);
-
-	page.setDefaultTimeout(20000);
-
-	const session = new Session(page, sessionFolder);
-
-	await page.goto(
-		"https://passport.yandex.com/auth?mode=auth&retpath=https%3A%2F%2Fwebmaster.yandex.com%2Fsites%2F",
-	);
-
-	if (fs.existsSync(`${sessionFolder}/cookies.json`)) {
-		await session
-			.loadSession()
-			.then(() => {
-				console.log(
-					`${chalk.bold(thread_name)} Загрузил профиль: ${chalk.yellow.bold(
-						loginName,
-					)}`,
-				);
-			})
-			.catch((err) => {
-				console.log(err);
-				console.log(
-					`${chalk.bold(
-						thread_name,
-					)} Ошибка загрузки профиля: ${chalk.yellow.bold(loginName)}`,
-				);
-			});
-	}
-
-	await page.reload();
-
-	let isLoginFieldExist = false;
-
 	try {
-		await page.click('[data-type="login"]', { timeout: 5000 });
-	} catch {}
-
-	try {
-		isLoginFieldExist = await page.waitForSelector("#passp-field-login", {
-			timeout: 8000,
-		});
-	} catch {}
-
-	let isLoginSuccess;
-
-	//если переменная true тогда нужно выполнить логин
-	if (isLoginFieldExist) {
-		isLoginSuccess = await yandexWeb.loginToWebmaster();
-		if (!isLoginSuccess) return false;
-	}
-
-	let selectAccount = false;
-
-	try {
-		selectAccount = await page.waitForSelector(
-			"a[href='https://webmaster.yandex.com/sites/']",
-			{ timeout: 5000 },
-		);
-	} catch {}
-
-	if (selectAccount) {
-		await selectAccount.click();
-	}
-
-	let isLoggedIn = false;
-
-	try {
-		const captchaButton = await page.waitForSelector(
-			".CheckboxCaptcha-Button",
-			{
-				timeout: 5000,
-				visible: true,
-			},
-		);
-
-		console.log("Капча найдена");
-
-		await captchaButton.click();
-
-		let isCaptchaExist = await yandexWeb.checkCaptchaExist(
-			".AdvancedCaptcha-Image",
-		);
-
-		if (isCaptchaExist) {
-			await yandexWeb.setCaptcha(
-				".Textinput_view_captcha .Textinput-Control",
-				".AdvancedCaptcha-Image",
-				".CaptchaButton.CaptchaButton_view_action",
-			);
-		}
-	} catch {}
-
-	try {
-		isLoggedIn = await page.waitForSelector(".UserID-Account", {
-			timeout: 5000,
-		});
-	} catch {}
-
-	if (!isLoggedIn)
-		return console.log(`Не удалось выполнить логин в аккаунт: ${loginName}`);
-
-	if (isLoginFieldExist) {
-		session
-			.saveSession()
-			.then(() => {
-				console.log(
-					`${chalk.bold(thread_name)} Профиль для аккаунта: ${login} сохранен`,
-				);
-			})
-			.catch((err) => {
-				console.log(err);
-				console.log(
-					`${chalk.bold(
-						thread_name,
-					)} Не удалось сохранить профиль для аккаунта: ${login}`,
-				);
-			});
-	}
-
-	console.log(
-		`${chalk.bold(
+		const yandexWeb = new YandexWeb(
+			page,
+			captcha,
+			telegram,
+			yandex,
 			thread_name,
-		)} Выполнен вход в аккаунт Яндекс Вебмастер: ${chalk.yellow.bold(
 			loginName,
-		)}`,
-	);
+			login,
+			pass,
+			answer,
+		);
 
-	//здесь уже начинается проверка
+		page.setDefaultTimeout(20000);
 
-	let result = [];
+		const session = new Session(page, sessionFolder);
 
-	for (let i = 0; i < hosts.length; i++) {
-		let host = hosts[i].host_id;
-		let url = hosts[i].unicode_host_url;
+		await page.goto(
+			"https://passport.yandex.com/auth?mode=auth&retpath=https%3A%2F%2Fwebmaster.yandex.com%2Fsites%2F",
+		);
 
-		const checkResult = await yandexWeb.checkHost(host, url);
-		if (checkResult) {
-			result.push(checkResult);
-			if (/Невозможно перенести сайт/m.test(checkResult[1])) {
-				console.log(
-					`${chalk.bold(thread_name)} Невозможно перенести сайт: ${url}`,
-				);
-				await telegram.sendMessage(`Невозможно перенести сайт: ${url}`);
+		if (fs.existsSync(`${sessionFolder}/cookies.json`)) {
+			await session
+				.loadSession()
+				.then(() => {
+					console.log(
+						`${chalk.bold(thread_name)} Загрузил профиль: ${chalk.yellow.bold(
+							loginName,
+						)}`,
+					);
+				})
+				.catch((err) => {
+					console.log(err);
+					console.log(
+						`${chalk.bold(
+							thread_name,
+						)} Ошибка загрузки профиля: ${chalk.yellow.bold(loginName)}`,
+					);
+				});
+		}
+
+		await page.reload();
+
+		let isLoginFieldExist = false;
+
+		try {
+			await page.click('[data-type="login"]', { timeout: 5000 });
+		} catch {}
+
+		try {
+			isLoginFieldExist = await page.waitForSelector("#passp-field-login", {
+				timeout: 8000,
+			});
+		} catch {}
+
+		let isLoginSuccess;
+
+		//если переменная true тогда нужно выполнить логин
+		if (isLoginFieldExist) {
+			isLoginSuccess = await yandexWeb.loginToWebmaster();
+			if (!isLoginSuccess) {
+				await browser.close();
+				return false;
 			}
 		}
-		// console.log(checkResult);
-		await page.waitForTimeout(1000);
+
+		let selectAccount = false;
+
+		try {
+			selectAccount = await page.waitForSelector(
+				"a[href='https://webmaster.yandex.com/sites/']",
+				{ timeout: 5000 },
+			);
+		} catch {}
+
+		if (selectAccount) {
+			await selectAccount.click();
+		}
+
+		let isLoggedIn = false;
+
+		try {
+			const captchaButton = await page.waitForSelector(
+				".CheckboxCaptcha-Button",
+				{
+					timeout: 5000,
+					visible: true,
+				},
+			);
+
+			console.log("Капча найдена");
+
+			await captchaButton.click();
+
+			let isCaptchaExist = await yandexWeb.checkCaptchaExist(
+				".AdvancedCaptcha-Image",
+			);
+
+			if (isCaptchaExist) {
+				await yandexWeb.setCaptcha(
+					".Textinput_view_captcha .Textinput-Control",
+					".AdvancedCaptcha-Image",
+					".CaptchaButton.CaptchaButton_view_action",
+				);
+			}
+		} catch {}
+
+		try {
+			isLoggedIn = await page.waitForSelector(".UserID-Account", {
+				timeout: 5000,
+			});
+		} catch {}
+
+		if (!isLoggedIn) {
+			await browser.close();
+			return false;
+		}
+
+		if (isLoginFieldExist) {
+			session
+				.saveSession()
+				.then(() => {
+					console.log(
+						`${chalk.bold(
+							thread_name,
+						)} Профиль для аккаунта: ${login} сохранен`,
+					);
+				})
+				.catch((err) => {
+					console.log(err);
+					console.log(
+						`${chalk.bold(
+							thread_name,
+						)} Не удалось сохранить профиль для аккаунта: ${login}`,
+					);
+				});
+		}
+
 		console.log(
-			`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
-				i + 1 + "/" + hosts.length,
+			`${chalk.bold(
+				thread_name,
+			)} Выполнен вход в аккаунт Яндекс Вебмастер: ${chalk.yellow.bold(
+				loginName,
 			)}`,
 		);
+
+		//здесь уже начинается проверка
+
+		let result = [];
+
+		for (let i = 0; i < hosts.length; i++) {
+			let host = hosts[i].host_id;
+			let url = hosts[i].unicode_host_url;
+
+			const checkResult = await yandexWeb.checkHost(host, url);
+
+			if (checkResult) {
+				if (/Невозможно перенести сайт/m.test(checkResult[1])) {
+					checkResult[1] = checkResult[1].replace("Понятно, спасибо", "");
+					console.log(
+						`${chalk.bold(
+							thread_name,
+						)} Невозможно перенести сайт: ${url} Аккаунт: ${login}`,
+					);
+					await telegram.sendMessage(
+						`Невозможно перенести сайт: ${url}\nАккаунт: ${login}`,
+					);
+				}
+				result.push(checkResult);
+			}
+
+			await page.waitForTimeout(1000);
+			console.log(
+				`${chalk.bold(thread_name)} Проверено сайтов: ${chalk.green.bold(
+					i + 1 + "/" + hosts.length,
+				)}`,
+			);
+		}
+
+		await google.sendData(result, loginName, url);
+
+		await browser.close();
+
+		return true;
+	} catch (err) {
+		console.log(err);
 	}
-
-	await google.sendData(result, loginName, url);
-
-	await browser.close();
-
-	return true;
 }
