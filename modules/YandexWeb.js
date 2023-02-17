@@ -65,7 +65,7 @@ class YandexWeb {
 				if (image) {
 					const solution = await this.captcha.resolveCaptcha(image); // Отправляем капчу в capmonster cloud
 
-					console.log("solution:", solution);
+					// console.log("solution:", solution);
 					const input = await this.page.waitForSelector(answerSelector, {
 						visible: true,
 					});
@@ -412,8 +412,6 @@ class YandexWeb {
 				return [url, notifcationText];
 			} else if (/captcha/i.test(className)) {
 				try {
-					console.log(`${chalk.bold(this.thread_name)} Капча найдена`);
-
 					await this.page.click(".CheckboxCaptcha-Button");
 
 					let isCaptchaExist = await this.checkCaptchaExist(
