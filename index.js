@@ -159,6 +159,7 @@ async function init(job = null) {
 		if (!urls.includes(url)) {
 			urls.push(url);
 			await google.clearSheet(url);
+			await google.sendData([[" ", " ", " "]], "", url);
 		}
 	}
 
