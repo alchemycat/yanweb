@@ -22,8 +22,9 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramChatID = process.env.TELEGRAM_CHAT_ID;
 const captchaAPI = process.env.CAPTCHA_API;
 
-const use_schedule = true; // использовать планировщик или нет
-const threads_count = 1; // количество потоков
+const use_schedule = false; // использовать планировщик или нет
+// const threads_count = 1; // количество потоков
+let working = false;
 
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
@@ -41,19 +42,27 @@ puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
 // `0 4,15 * * *`
 
 if (use_schedule) {
-	const job = schedule.scheduleJob(`*/60 * * * *`, function () {
-		init();
+	const job = schedule.scheduleJob(`0 7 * * *`, function () {
+		init(job);
 	});
-	const date = new Date(
-		job.pendingInvocations[0].fireDate,
-	).toLocaleTimeString();
 
-	console.log(`Запуск запланирован на: ${date}`);
+	let nextDate = job.nextInvocation();
+	nextDate = new Date(nextDate._date.ts).toLocaleTimeString();
+
+	console.log(`Запуск запланирован на: ${nextDate}`);
 } else {
 	init();
 }
 
-async function init() {
+async function init(job = null) {
+	if (working) {
+		return;
+	} else {
+		working = true;
+	}
+	
+	const google = new Google();
+
 	// if (cluster.isMaster) {
 	// await new Promise((resolve) => {
 	// 	figlet("Yandex Webmaster Checker", function (err, data) {
@@ -72,7 +81,7 @@ async function init() {
 	//главный поток начинает работу, инициализирует данные
 	// const threads_count = prompt(chalk.bold("Количество потоков? "));
 	// console.log(`Количество потоков: ${threads_count}`);
-	let global_counter = 0;
+	// let global_counter = 0;
 
 	if (!fs.existsSync(`${__dirname}/profiles`)) {
 		fs.mkdirSync(`${__dirname}/profiles`);
@@ -142,10 +151,20 @@ async function init() {
 	// process.exit();
 	// } else {
 	// const { token, login, pass, answer, url } = data[global_counter - 1];
+	
+	//очистка всех таблиц
+	for (let i = 0; i < data.length; i++) {
+		let urls = [];
+		const { url } = data[i];
+		if (!urls.includes(url)) {
+			urls.push(url);
+			await google.clearSheet(url);
+		}
+	}
 
 	for (let i = 0; i < data.length; i++) {
 		const thread_name = `[Поток 1]`;
-		const { token, login, pass, answer, url } = data[global_counter];
+		const { token, login, pass, answer, url } = data[i];
 
 		let loginName = login;
 
@@ -168,6 +187,7 @@ async function init() {
 			url,
 			thread_name,
 			loginName,
+			google
 		);
 
 		if (!result)
@@ -176,6 +196,15 @@ async function init() {
 			);
 
 		console.log(`${chalk.bold(thread_name)} Проверка завершена`);
+	}
+
+	working = false;
+
+	if (job) {
+		let nextDate = job.nextInvocation();
+		nextDate = new Date(nextDate._date.ts).toLocaleTimeString();
+	
+		console.log(`Запуск запланирован на: ${nextDate}`);
 	}
 
 	// process.send({ message: "get_data", thread_name });
@@ -195,8 +224,8 @@ async function main(
 	url,
 	thread_name,
 	loginName,
+	google
 ) {
-	const google = new Google();
 	const yandex = new Yandex(token);
 	const telegram = new Telegram(telegramToken, telegramChatID);
 	const captcha = new Captcha(captchaAPI, "yandexwave");
@@ -225,6 +254,7 @@ async function main(
 	});
 
 	const page = await browser.newPage();
+
 	try {
 		const yandexWeb = new YandexWeb(
 			page,
@@ -381,7 +411,7 @@ async function main(
 
 			const checkResult = await yandexWeb.checkHost(host, url);
 
-			if (checkResult) {
+			if (checkResult && checkResult[1] !== "Без переезда") {
 				if (/Невозможно перенести сайт/m.test(checkResult[1])) {
 					checkResult[1] = checkResult[1].replace("Понятно, спасибо", "");
 					console.log(
@@ -393,6 +423,7 @@ async function main(
 						`Невозможно перенести сайт: ${url}\nАккаунт: ${login}`,
 					);
 				}
+				checkResult.unshift(login);
 				result.push(checkResult);
 			}
 
