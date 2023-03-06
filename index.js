@@ -237,14 +237,19 @@ async function main(
 
 	const tempHost = await yandex.getHosts();
 
-	tempHost.forEach((host) => {
-		if (!host.main_mirror) {
-			hosts.push(host);
-		}
-	});
+	if (Array.isArray(tempHost) && tempHost.length) {
+		tempHost.forEach((host) => {
+			if (!host.main_mirror) {
+				hosts.push(host);
+			}
+		});
+	} else {
+		return false;
+	}
 
 	if (!hosts)
 		return console.log("Не удалось получить данные о доменах на аккаунте");
+
 
 	const browser = await puppeteer.launch({
 		headless: false,
@@ -423,6 +428,34 @@ async function main(
 					await telegram.sendMessage(
 						`Невозможно перенести сайт: ${url}\nАккаунт: ${login}`,
 					);
+
+					let targetName;
+					
+					if (/(?<=Невозможно\sперенести\sсайт\sна\s)http.+?(?=\.\sПроверьте\sсоответствие\sсайта\sвсем)/.test(checkResult[1])) {
+						targetName = checkResult[1].match(/(?<=Невозможно\sперенести\sсайт\sна\s)http.+?(?=\.\sПроверьте\sсоответствие\sсайта\sвсем)/)[0];
+
+						const clearName = targetName.match(/(?<=https:\/\/).*/g)[0];
+
+						const relocateField = await page.waitForXPath('//div[@class="MirrorsContent"]//input[@class="Textinput-Control"]', {visible: true});
+
+						await page.waitForTimeout(2000);
+						
+						await relocateField.type(targetName);
+
+						await page.waitForTimeout(5000);
+
+						const suggest = await page.waitForXPath(`//li/span[contains(@class, 'SitesSuggest-Link') and contains(text(), ${clearName})]`, {visible: true});
+
+						await suggest.click();
+
+						await page.waitForTimeout(4000);
+
+						const submitButton = await page.waitForXPath('//div[@class="MirrorsActions-MoveActionWrapper"]/button', {visible: true});
+
+						await submitButton.click();
+
+						console.log(`${chalk.bold(thread_name)} Повторная отправка домена: ${url} на переезд: ${targetName}`);
+					}
 				}
 				checkResult.unshift(login);
 				result.push(checkResult);
